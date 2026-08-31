@@ -48,6 +48,16 @@ export function validatePaymentLinkInput({ amount, currency, customer, reference
   }
 }
 
+export function createRecoveryReferenceId(recoveryCaseId) {
+  const caseId = recoveryCaseId?.toString();
+
+  if (!/^[a-f\d]{24}$/i.test(caseId || "")) {
+    throw new TypeError("A valid RecoveryCase ID is required to create a recovery Payment Link.");
+  }
+
+  return `RECOVERY_${caseId}`;
+}
+
 export async function createPaymentLink(input, client) {
   validatePaymentLinkInput(input);
   const razorpayClient = client || createRazorpayClient();
@@ -70,6 +80,30 @@ export async function createPaymentLink(input, client) {
   } catch (error) {
     throw new RazorpayApiError("Razorpay could not create the Payment Link.", error);
   }
+}
+
+export async function createRecoveryPaymentLink({ recoveryCase, payment, customer }, client) {
+  const recoveryCaseId = recoveryCase?._id?.toString();
+  const referenceId = createRecoveryReferenceId(recoveryCaseId);
+  const paymentLinkCustomer = customer?.name && customer?.phone && customer?.email
+    ? { name: customer.name, contact: customer.phone, email: customer.email }
+    : undefined;
+
+  const paymentLink = await createPaymentLink(
+    {
+      amount: payment?.amount,
+      currency: payment?.currency,
+      customer: paymentLinkCustomer,
+      referenceId,
+      description: `RecoverAI recovery payment for case ${recoveryCaseId}`,
+      notify: { sms: false, email: false },
+      reminderEnable: false,
+      notes: { recovery_case_id: recoveryCaseId },
+    },
+    client,
+  );
+
+  return { id: paymentLink.id, short_url: paymentLink.short_url, reference_id: referenceId };
 }
 
 export async function verifyRazorpayTestModeAuthentication(client, keyId = process.env.RAZORPAY_KEY_ID) {

@@ -6,6 +6,18 @@ function firstDefined(...values) {
   return values.find((value) => value !== undefined && value !== null && value !== "");
 }
 
+function isRecoveryCaseId(value) {
+  return typeof value === "string" && /^[a-f\d]{24}$/i.test(value);
+}
+
+export function resolveRecoveryCaseId({ notes, referenceId } = {}) {
+  const notedCaseId = firstDefined(notes?.recovery_case_id, notes?.recoveryCaseId);
+  if (isRecoveryCaseId(notedCaseId)) return notedCaseId;
+
+  const match = /^RECOVERY_([a-f\d]{24})$/i.exec(referenceId || "");
+  return match?.[1];
+}
+
 export function verifyRazorpaySignature(rawBody, signature, secret) {
   if (!Buffer.isBuffer(rawBody) || !signature || !secret) {
     return false;
@@ -52,38 +64,57 @@ export function normalizeRazorpayPayment(eventType, payload) {
       email: entity.email || undefined,
       phone: entity.contact || undefined,
     },
-    recoveryCaseId: firstDefined(entity.notes?.recovery_case_id, entity.notes?.recoveryCaseId),
+    recoveryCaseId: resolveRecoveryCaseId({ notes: entity.notes }),
   };
 }
 
-async function findOrCreateCustomer(customerDetails) {
+export function normalizePaymentLinkPaid(payload) {
+  const entity = payload?.payload?.payment_link?.entity;
+  const recoveredAmount = entity?.amount_paid;
+
+  if (!entity?.id || !Number.isSafeInteger(recoveredAmount) || recoveredAmount < 1 || !entity.currency) {
+    throw new Error("Webhook payload does not contain a valid paid Payment Link entity.");
+  }
+
+  const timestamp = firstDefined(entity.paid_at, entity.updated_at, entity.created_at);
+  return {
+    paymentLinkId: entity.id,
+    referenceId: entity.reference_id,
+    recoveryCaseId: resolveRecoveryCaseId({ notes: entity.notes, referenceId: entity.reference_id }),
+    recoveredAmount,
+    currency: entity.currency,
+    paidAt: timestamp ? new Date(timestamp * 1_000) : new Date(),
+  };
+}
+
+async function findOrCreateCustomer(customerDetails, models) {
   const filters = [];
 
   if (customerDetails.razorpayCustomerId) filters.push({ razorpayCustomerId: customerDetails.razorpayCustomerId });
   if (customerDetails.email) filters.push({ email: customerDetails.email.toLowerCase() });
   if (customerDetails.phone) filters.push({ phone: customerDetails.phone });
 
-  const customer = filters.length ? await Customer.findOne({ $or: filters }) : null;
+  const customer = filters.length ? await models.Customer.findOne({ $or: filters }) : null;
   if (customer) {
     return customer;
   }
 
-  return Customer.create(customerDetails);
+  return models.Customer.create(customerDetails);
 }
 
-async function recordFailedPayment(normalized) {
-  const existingPayment = await Payment.findOne({ razorpayPaymentId: normalized.payment.razorpayPaymentId });
+async function recordFailedPayment(normalized, models) {
+  const existingPayment = await models.Payment.findOne({ razorpayPaymentId: normalized.payment.razorpayPaymentId });
   if (existingPayment) return { duplicatePayment: true, payment: existingPayment };
 
-  const customer = await findOrCreateCustomer(normalized.customer);
-  const payment = await Payment.create({ ...normalized.payment, customer: customer._id });
-  await Customer.findByIdAndUpdate(customer._id, {
+  const customer = await findOrCreateCustomer(normalized.customer, models);
+  const payment = await models.Payment.create({ ...normalized.payment, customer: customer._id });
+  await models.Customer.findByIdAndUpdate(customer._id, {
     $inc: { totalPayments: 1, failedPayments: 1 },
     $set: { lastPaymentAt: payment.failedAt },
   });
 
-  const recoveryCase = await RecoveryCase.create({ payment: payment._id, customer: customer._id });
-  await AuditLog.create({
+  const recoveryCase = await models.RecoveryCase.create({ payment: payment._id, customer: customer._id });
+  await models.AuditLog.create({
     recoveryCase: recoveryCase._id,
     payment: payment._id,
     actor: "razorpay",
@@ -95,13 +126,13 @@ async function recordFailedPayment(normalized) {
   return { duplicatePayment: false, payment, recoveryCase };
 }
 
-async function recordCapturedPayment(normalized) {
-  let payment = await Payment.findOne({ razorpayPaymentId: normalized.payment.razorpayPaymentId });
+async function recordCapturedPayment(normalized, models) {
+  let payment = await models.Payment.findOne({ razorpayPaymentId: normalized.payment.razorpayPaymentId });
 
   if (!payment) {
-    const customer = await findOrCreateCustomer(normalized.customer);
-    payment = await Payment.create({ ...normalized.payment, customer: customer._id });
-    await Customer.findByIdAndUpdate(customer._id, {
+    const customer = await findOrCreateCustomer(normalized.customer, models);
+    payment = await models.Payment.create({ ...normalized.payment, customer: customer._id });
+    await models.Customer.findByIdAndUpdate(customer._id, {
       $inc: { totalPayments: 1, successfulPayments: 1 },
       $set: { lastPaymentAt: payment.capturedAt },
     });
@@ -112,16 +143,16 @@ async function recordCapturedPayment(normalized) {
 
   if (!normalized.recoveryCaseId) return { payment, recovered: false };
 
-  const recoveryCase = await RecoveryCase.findOneAndUpdate(
-    { _id: normalized.recoveryCaseId, status: { $ne: "recovered" } },
+  const recoveryCase = await models.RecoveryCase.findOneAndUpdate(
+    { _id: normalized.recoveryCaseId, status: { $nin: ["recovered", "closed"] } },
     { $set: { status: "recovered", recoveredAmount: payment.amount, recoveredAt: payment.capturedAt, closedAt: payment.capturedAt } },
     { new: true },
   );
 
   if (!recoveryCase) return { payment, recovered: false };
 
-  await Customer.findByIdAndUpdate(recoveryCase.customer, { $inc: { totalRecoveredAmount: payment.amount } });
-  await AuditLog.create({
+  await models.Customer.findByIdAndUpdate(recoveryCase.customer, { $inc: { totalRecoveredAmount: payment.amount } });
+  await models.AuditLog.create({
     recoveryCase: recoveryCase._id,
     payment: payment._id,
     actor: "razorpay",
@@ -133,12 +164,52 @@ async function recordCapturedPayment(normalized) {
   return { payment, recoveryCase, recovered: true };
 }
 
-export async function processRazorpayEvent(eventType, payload) {
-  if (eventType !== "payment.failed" && eventType !== "payment.captured") {
+async function recordPaymentLinkPaid(normalized, models) {
+  if (!normalized.recoveryCaseId) return { ignored: true, recovered: false };
+
+  const recoveryCase = await models.RecoveryCase.findOneAndUpdate(
+    { _id: normalized.recoveryCaseId, status: { $nin: ["recovered", "closed"] } },
+    {
+      $set: {
+        status: "recovered",
+        recoveredAmount: normalized.recoveredAmount,
+        recoveredAt: normalized.paidAt,
+        closedAt: normalized.paidAt,
+      },
+    },
+    { new: true },
+  );
+
+  if (!recoveryCase) return { ignored: true, recovered: false };
+
+  await models.Customer.findByIdAndUpdate(recoveryCase.customer, { $inc: { totalRecoveredAmount: normalized.recoveredAmount } });
+  await models.AuditLog.create({
+    recoveryCase: recoveryCase._id,
+    payment: recoveryCase.payment,
+    actor: "razorpay",
+    eventType: "PAYMENT_LINK_PAID",
+    message: "Razorpay confirmed the Recovery Payment Link was paid.",
+    metadata: {
+      paymentLinkId: normalized.paymentLinkId,
+      referenceId: normalized.referenceId,
+      recoveredAmount: normalized.recoveredAmount,
+    },
+  });
+
+  return { recoveryCase, recovered: true };
+}
+
+export async function processRazorpayEvent(eventType, payload, dependencies = {}) {
+  const models = { AuditLog, Customer, Payment, RecoveryCase, ...dependencies };
+
+  if (eventType !== "payment.failed" && eventType !== "payment.captured" && eventType !== "payment_link.paid") {
     return { ignored: true };
   }
 
-  const normalized = normalizeRazorpayPayment(eventType, payload);
-  return eventType === "payment.failed" ? recordFailedPayment(normalized) : recordCapturedPayment(normalized);
-}
+  if (eventType === "payment_link.paid") {
+    return recordPaymentLinkPaid(normalizePaymentLinkPaid(payload), models);
+  }
 
+  const normalized = normalizeRazorpayPayment(eventType, payload);
+  return eventType === "payment.failed" ? recordFailedPayment(normalized, models) : recordCapturedPayment(normalized, models);
+}
