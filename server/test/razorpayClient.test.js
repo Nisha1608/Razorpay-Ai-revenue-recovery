@@ -24,6 +24,7 @@ test("Razorpay client requires server-side credentials", () => {
 
 test("Payment Link input is validated before an outbound request can be made", () => {
   assert.doesNotThrow(() => validatePaymentLinkInput(validPaymentLinkInput));
+  assert.doesNotThrow(() => validatePaymentLinkInput({ ...validPaymentLinkInput, customer: undefined }));
   assert.throws(() => validatePaymentLinkInput({ ...validPaymentLinkInput, amount: 1.5 }), TypeError);
   assert.throws(() => validatePaymentLinkInput({ ...validPaymentLinkInput, customer: { name: "Aman" } }), TypeError);
 });

@@ -39,8 +39,8 @@ export function validatePaymentLinkInput({ amount, currency, customer, reference
     throw new TypeError("Payment Link currency must be a three-letter ISO currency code.");
   }
 
-  if (!customer?.name || !customer?.contact || !customer?.email) {
-    throw new TypeError("Payment Link customer name, contact, and email are required.");
+  if (customer && (!customer.name || !customer.contact || !customer.email)) {
+    throw new TypeError("When provided, Payment Link customer name, contact, and email are all required.");
   }
 
   if (!referenceId || referenceId.length > 40) {
