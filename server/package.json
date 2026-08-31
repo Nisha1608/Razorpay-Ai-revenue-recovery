@@ -7,13 +7,14 @@
     "dev": "node --watch src/server.js",
     "start": "node src/server.js",
     "test": "node --test",
-    "seed": "node src/seed/seed.js"
+    "seed": "node src/seed/seed.js",
+    "verify:razorpay": "node src/scripts/verifyRazorpay.js"
   },
   "dependencies": {
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
-    "mongoose": "^8.9.5"
+    "mongoose": "^8.9.5",
+    "razorpay": "^2.9.8"
   }
 }
-
