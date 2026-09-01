@@ -34,7 +34,10 @@ test("Payment Link creation persists its safe provider reference without replaci
     execution: { idempotencyKey: "preserve-this-key" },
     save: async () => { saves += 1; },
   };
-  const client = { paymentLink: { create: async () => ({ id: "plink_test_002", short_url: "https://rzp.io/i/second" }) } };
+  const client = { paymentLink: {
+    all: async () => ({ payment_links: [] }),
+    create: async () => ({ id: "plink_test_002", short_url: "https://rzp.io/i/second" }),
+  } };
 
   await createAndPersistRecoveryPaymentLink({ recoveryCase, payment, customer, recoveryAction, client });
 
@@ -43,4 +46,22 @@ test("Payment Link creation persists its safe provider reference without replaci
   assert.equal(recoveryAction.execution.idempotencyKey, "preserve-this-key");
   assert.equal(recoveryAction.execution.providerReference, "plink_test_002");
   assert.equal(recoveryAction.execution.metadata.paymentLinkShortUrl, "https://rzp.io/i/second");
+  assert.equal(recoveryAction.execution.metadata.referenceId, "RECOVERY_507f1f77bcf86cd799439011");
+  assert.ok(recoveryAction.execution.executedAt instanceof Date);
+});
+
+test("an existing Recovery Payment Link is reconciled instead of creating a duplicate", async () => {
+  let created = false;
+  const recoveryAction = { type: "CREATE_PAYMENT_LINK", status: "approved", execution: {}, save: async () => {} };
+  const client = { paymentLink: {
+    all: async () => ({ payment_links: [{ id: "plink_existing", short_url: "https://rzp.io/i/existing", reference_id: "RECOVERY_507f1f77bcf86cd799439011" }] }),
+    create: async () => { created = true; },
+  } };
+
+  const link = await createAndPersistRecoveryPaymentLink({ recoveryCase, payment, customer, recoveryAction, client });
+
+  assert.equal(created, false);
+  assert.equal(link.id, "plink_existing");
+  assert.equal(recoveryAction.status, "executed");
+  assert.equal(recoveryAction.execution.providerReference, "plink_existing");
 });

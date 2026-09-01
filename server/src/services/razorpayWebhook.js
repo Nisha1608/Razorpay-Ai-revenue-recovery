@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 
 import { AuditLog, Customer, Payment, RecoveryCase } from "../models/index.js";
+import { analyzeAndRecommendRecovery } from "./recoveryAnalysis.js";
 
 function firstDefined(...values) {
   return values.find((value) => value !== undefined && value !== null && value !== "");
@@ -102,7 +103,7 @@ async function findOrCreateCustomer(customerDetails, models) {
   return models.Customer.create(customerDetails);
 }
 
-async function recordFailedPayment(normalized, models) {
+async function recordFailedPayment(normalized, models, analyzeRecovery) {
   const existingPayment = await models.Payment.findOne({ razorpayPaymentId: normalized.payment.razorpayPaymentId });
   if (existingPayment) return { duplicatePayment: true, payment: existingPayment };
 
@@ -122,6 +123,13 @@ async function recordFailedPayment(normalized, models) {
     message: "Razorpay reported a failed payment and RecoverAI opened a recovery case.",
     metadata: { razorpayPaymentId: payment.razorpayPaymentId, failureCode: payment.failureCode },
   });
+
+  try {
+    await analyzeRecovery(recoveryCase._id);
+  } catch (error) {
+    // The failed payment is durable even if the follow-up analysis is unavailable.
+    console.error("Recovery analysis failed", error.message);
+  }
 
   return { duplicatePayment: false, payment, recoveryCase };
 }
@@ -200,7 +208,8 @@ async function recordPaymentLinkPaid(normalized, models) {
 }
 
 export async function processRazorpayEvent(eventType, payload, dependencies = {}) {
-  const models = { AuditLog, Customer, Payment, RecoveryCase, ...dependencies };
+  const { analyzeRecovery = analyzeAndRecommendRecovery, ...modelOverrides } = dependencies;
+  const models = { AuditLog, Customer, Payment, RecoveryCase, ...modelOverrides };
 
   if (eventType !== "payment.failed" && eventType !== "payment.captured" && eventType !== "payment_link.paid") {
     return { ignored: true };
@@ -211,5 +220,5 @@ export async function processRazorpayEvent(eventType, payload, dependencies = {}
   }
 
   const normalized = normalizeRazorpayPayment(eventType, payload);
-  return eventType === "payment.failed" ? recordFailedPayment(normalized, models) : recordCapturedPayment(normalized, models);
+  return eventType === "payment.failed" ? recordFailedPayment(normalized, models, analyzeRecovery) : recordCapturedPayment(normalized, models);
 }

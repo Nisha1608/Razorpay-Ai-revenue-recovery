@@ -106,6 +106,22 @@ export async function createRecoveryPaymentLink({ recoveryCase, payment, custome
   return { id: paymentLink.id, short_url: paymentLink.short_url, reference_id: referenceId };
 }
 
+export async function findRecoveryPaymentLink(recoveryCaseId, client) {
+  const referenceId = createRecoveryReferenceId(recoveryCaseId);
+  const razorpayClient = client || createRazorpayClient();
+
+  try {
+    const result = await razorpayClient.paymentLink.all({ count: 100 });
+    const paymentLink = result.payment_links?.find((link) => link.reference_id === referenceId);
+
+    return paymentLink
+      ? { id: paymentLink.id, short_url: paymentLink.short_url, reference_id: referenceId }
+      : null;
+  } catch (error) {
+    throw new RazorpayApiError("Razorpay could not look up the recovery Payment Link.", error);
+  }
+}
+
 export async function verifyRazorpayTestModeAuthentication(client, keyId = process.env.RAZORPAY_KEY_ID) {
   if (!keyId?.startsWith("rzp_test_")) {
     throw new RazorpayConfigurationError("Razorpay authentication verification only permits Test Mode keys (rzp_test_*).");

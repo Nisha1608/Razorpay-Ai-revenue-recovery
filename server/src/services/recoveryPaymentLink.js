@@ -1,4 +1,4 @@
-import { createRecoveryPaymentLink } from "./razorpayClient.js";
+import { createRecoveryPaymentLink, findRecoveryPaymentLink } from "./razorpayClient.js";
 
 function toSafeLinkInfo(action) {
   return {
@@ -22,9 +22,7 @@ export async function createAndPersistRecoveryPaymentLink({ recoveryCase, paymen
   recoveryAction.status = "executing";
   await recoveryAction.save();
 
-  try {
-    const paymentLink = await createRecoveryPaymentLink({ recoveryCase, payment, customer }, client);
-
+  const persistSuccess = async (paymentLink) => {
     recoveryAction.execution.providerReference = paymentLink.id;
     recoveryAction.execution.executedAt = new Date();
     recoveryAction.execution.metadata = {
@@ -33,12 +31,28 @@ export async function createAndPersistRecoveryPaymentLink({ recoveryCase, paymen
       referenceId: paymentLink.reference_id,
     };
     recoveryAction.status = "executed";
+    recoveryAction.markModified?.("execution");
     await recoveryAction.save();
-
     return paymentLink;
+  };
+
+  try {
+    const existingPaymentLink = await findRecoveryPaymentLink(recoveryCase._id, client);
+    if (existingPaymentLink) return persistSuccess(existingPaymentLink);
+
+    return persistSuccess(await createRecoveryPaymentLink({ recoveryCase, payment, customer }, client));
   } catch (error) {
+    try {
+      // A create response can be lost after Razorpay has already created the link.
+      const existingPaymentLink = await findRecoveryPaymentLink(recoveryCase._id, client);
+      if (existingPaymentLink) return persistSuccess(existingPaymentLink);
+    } catch {
+      // Preserve the original create failure for the caller and audit trail.
+    }
+
     recoveryAction.status = "failed";
     recoveryAction.execution.failureReason = error.message;
+    recoveryAction.markModified?.("execution");
     await recoveryAction.save();
     throw error;
   }
