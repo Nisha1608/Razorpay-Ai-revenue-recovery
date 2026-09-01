@@ -2,7 +2,9 @@ import cors from "cors";
 import express from "express";
 
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler.js";
+import dashboardRouter from "./routes/dashboardRoutes.js";
 import recoveryRouter from "./routes/recoveryRoutes.js";
+import recoveryCaseReadRouter from "./routes/recoveryCaseReadRoutes.js";
 import testRecoveryRouter from "./routes/testRecoveryRoutes.js";
 import testRazorpayRouter from "./routes/testRazorpayRoutes.js";
 import webhookRouter from "./routes/webhookRoutes.js";
@@ -20,6 +22,8 @@ app.use(express.json());
 app.use("/api/test", testRazorpayRouter);
 app.use("/api/test", testRecoveryRouter);
 app.use("/api/recovery", recoveryRouter);
+app.use("/api/dashboard", dashboardRouter);
+app.use("/api/recovery-cases", recoveryCaseReadRouter);
 
 app.get("/api/health", (_request, response) => {
   response.status(200).json({
