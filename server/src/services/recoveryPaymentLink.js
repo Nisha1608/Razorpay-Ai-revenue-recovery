@@ -9,8 +9,8 @@ function toSafeLinkInfo(action) {
 }
 
 export async function createAndPersistRecoveryPaymentLink({ recoveryCase, payment, customer, recoveryAction, client }) {
-  if (recoveryAction?.type !== "CREATE_PAYMENT_LINK") {
-    throw new TypeError("RecoveryAction must be CREATE_PAYMENT_LINK.");
+  if (!["CREATE_PAYMENT_LINK", "RETRY_PAYMENT"].includes(recoveryAction?.type)) {
+    throw new TypeError("RecoveryAction must create a Razorpay Payment Link.");
   }
 
   if (recoveryAction.execution?.providerReference) {
@@ -18,7 +18,7 @@ export async function createAndPersistRecoveryPaymentLink({ recoveryCase, paymen
   }
 
   recoveryAction.execution ??= {};
-  recoveryAction.execution.idempotencyKey ??= `recovery-payment-link:${recoveryCase._id}`;
+  recoveryAction.execution.idempotencyKey ??= `recovery-payment-link:${recoveryAction.type}:${recoveryCase._id}`;
   recoveryAction.status = "executing";
   await recoveryAction.save();
 
@@ -37,14 +37,14 @@ export async function createAndPersistRecoveryPaymentLink({ recoveryCase, paymen
   };
 
   try {
-    const existingPaymentLink = await findRecoveryPaymentLink(recoveryCase._id, client);
+    const existingPaymentLink = await findRecoveryPaymentLink(recoveryCase._id, client, recoveryAction.type);
     if (existingPaymentLink) return persistSuccess(existingPaymentLink);
 
-    return persistSuccess(await createRecoveryPaymentLink({ recoveryCase, payment, customer }, client));
+    return persistSuccess(await createRecoveryPaymentLink({ recoveryCase, payment, customer, actionType: recoveryAction.type }, client));
   } catch (error) {
     try {
       // A create response can be lost after Razorpay has already created the link.
-      const existingPaymentLink = await findRecoveryPaymentLink(recoveryCase._id, client);
+      const existingPaymentLink = await findRecoveryPaymentLink(recoveryCase._id, client, recoveryAction.type);
       if (existingPaymentLink) return persistSuccess(existingPaymentLink);
     } catch {
       // Preserve the original create failure for the caller and audit trail.

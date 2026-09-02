@@ -1,9 +1,15 @@
 import { RECOVERY_ACTION_TYPES } from "../constants/recovery.js";
 import { isRetryableFailure } from "./recoveryDecisionEngine.js";
 
-export function evaluateRecoveryPolicy({ action, payment, customer }) {
+const MAX_AUTOMATIC_RETRIES = 1;
+
+export function evaluateRecoveryPolicy({ action, payment, customer, recoveryCase }) {
   if (!RECOVERY_ACTION_TYPES.includes(action)) {
     return { allowed: false, reason: "Unknown recovery action." };
+  }
+
+  if (["recovered", "closed"].includes(recoveryCase?.status)) {
+    return { allowed: false, reason: "Closed recovery cases cannot receive recovery actions." };
   }
 
   if (action === "DO_NOTHING") return { allowed: true, reason: "No action is always permitted." };
@@ -17,6 +23,9 @@ export function evaluateRecoveryPolicy({ action, payment, customer }) {
   }
 
   if (action === "RETRY_PAYMENT") {
+    if ((recoveryCase?.previousAttempts || 0) >= MAX_AUTOMATIC_RETRIES) {
+      return { allowed: false, reason: "The automatic retry limit has been reached." };
+    }
     return isRetryableFailure(payment)
       ? { allowed: true, reason: "The payment failure is retryable." }
       : { allowed: false, reason: "The payment failure is not retryable." };
@@ -30,4 +39,3 @@ export function evaluateRecoveryPolicy({ action, payment, customer }) {
 
   return { allowed: false, reason: "The action is not permitted." };
 }
-

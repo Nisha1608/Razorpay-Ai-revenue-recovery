@@ -47,6 +47,15 @@ export function buildRecoveryCaseDetail(recoveryCase, latestAction) {
   };
 }
 
+function buildJourney(cases) {
+  return cases.map((recoveryCase) => ({
+    attemptNumber: recoveryCase.attemptNumber || 1,
+    status: recoveryCase.status,
+    recommendedAction: recoveryCase.recommendedAction,
+    recoveredAt: recoveryCase.recoveredAt,
+  }));
+}
+
 function queueMatches(recoveryCase, query) {
   const action = queueAction(recoveryCase);
   const customerText = [recoveryCase.customer?.name, recoveryCase.customer?.email, recoveryCase.customer?.phone].filter(Boolean).join(" ").toLowerCase();
@@ -94,7 +103,9 @@ export function createRecoveryCaseReadRouter({ models = { AuditLog, Customer, Pa
       if (!recoveryCase) return response.status(404).json({ error: { message: "Recovery case not found." } });
 
       const latestAction = queueAction(recoveryCase) || await models.RecoveryAction.findOne({ recoveryCase: recoveryCase._id }).sort({ createdAt: -1 }).lean();
-      response.json(buildRecoveryCaseDetail(recoveryCase, latestAction));
+      const rootRecoveryCase = recoveryCase.rootRecoveryCase || recoveryCase._id;
+      const journeyCases = await models.RecoveryCase.find({ rootRecoveryCase }).sort({ attemptNumber: 1 }).select("attemptNumber status recommendedAction recoveredAt").lean();
+      response.json({ ...buildRecoveryCaseDetail(recoveryCase, latestAction), journey: { status: recoveryCase.journeyStatus || "open", attempts: buildJourney(journeyCases) } });
     } catch (error) {
       next(error);
     }

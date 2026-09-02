@@ -1,8 +1,17 @@
-import { AuditLog, Customer, Payment, RecoveryAction, RecoveryCase } from "../models/index.js";
+import { AuditLog, Customer, Payment, RecoveryAction, RecoveryCase, RecoveryEscalation, RecoveryNotification } from "../models/index.js";
 import { createAndPersistRecoveryPaymentLink } from "./recoveryPaymentLink.js";
 
 function createError(message, statusCode) {
   return Object.assign(new Error(message), { statusCode });
+}
+
+function isStalePaymentLinkExecution(action, now = Date.now()) {
+  const updatedAt = new Date(action?.updatedAt).getTime();
+  return ["CREATE_PAYMENT_LINK", "RETRY_PAYMENT"].includes(action?.type)
+    && action.status === "executing"
+    && !action.execution?.providerReference
+    && Number.isFinite(updatedAt)
+    && now - updatedAt >= 30_000;
 }
 
 export async function approveRecoveryAction(actionId, approvedBy, dependencies = {}) {
@@ -28,11 +37,20 @@ export async function approveRecoveryAction(actionId, approvedBy, dependencies =
 }
 
 export async function executeRecoveryAction(actionId, dependencies = {}) {
-  const models = { AuditLog, Customer, Payment, RecoveryAction, RecoveryCase, ...dependencies.models };
+  const models = { AuditLog, Customer, Payment, RecoveryAction, RecoveryCase, RecoveryEscalation, RecoveryNotification, ...dependencies.models };
   const createLink = dependencies.createLink || createAndPersistRecoveryPaymentLink;
   const action = await models.RecoveryAction.findById(actionId);
   if (!action) throw createError("Recovery action not found.", 404);
-  if (action.status !== "approved") throw createError("Only approved recovery actions can be executed.", 409);
+  if (action.policyEvaluation?.allowed === false) throw createError("This recovery action is blocked by policy.", 403);
+  if (action.status !== "approved" && !isStalePaymentLinkExecution(action, dependencies.now?.() ?? Date.now())) {
+    throw createError("Only approved recovery actions can be executed.", 409);
+  }
+
+  const recoveryCase = await models.RecoveryCase.findById(action.recoveryCase);
+  if (!recoveryCase) throw createError("Recovery action is missing case context.", 409);
+  if (["recovered", "closed", "superseded"].includes(recoveryCase.status)) {
+    throw createError("Closed recovery cases cannot execute recovery actions.", 409);
+  }
 
   const audit = async (eventType, message, metadata) => models.AuditLog.create({
     recoveryCase: action.recoveryCase,
@@ -43,36 +61,49 @@ export async function executeRecoveryAction(actionId, dependencies = {}) {
     metadata,
   });
 
-  if (action.type === "DO_NOTHING") {
-    action.status = "skipped";
+  const markExecuted = async (metadata = {}) => {
+    action.status = "executed";
     action.execution ??= {};
     action.execution.executedAt = new Date();
+    action.execution.metadata = { ...action.execution.metadata, ...metadata };
+    action.markModified?.("execution");
     await action.save();
+  };
+
+  if (action.type === "DO_NOTHING") {
+    await markExecuted({ outcome: "no_action_taken" });
+    recoveryCase.status = "closed";
+    recoveryCase.closedAt = new Date();
+    recoveryCase.journeyStatus = "closed";
+    await recoveryCase.save?.();
     await audit("ACTION_EXECUTED", "No recovery action was taken by design.");
     return { action };
   }
 
   if (action.type === "ESCALATE_TO_HUMAN") {
-    action.status = "executed";
-    action.execution ??= {};
-    action.execution.executedAt = new Date();
-    action.execution.metadata = { ...action.execution.metadata, escalation: "human_review_required" };
-    await action.save();
+    const escalation = await models.RecoveryEscalation.create({
+      recoveryCase: recoveryCase._id,
+      action: action._id,
+      reason: action.rationale,
+    });
+    await markExecuted({ escalationId: escalation._id, escalationStatus: escalation.status });
     await audit("ACTION_EXECUTED", "Recovery case was escalated to human review.");
-    return { action };
+    return { action, escalation };
   }
 
-  if (action.type === "CREATE_PAYMENT_LINK") {
-    const recoveryCase = await models.RecoveryCase.findById(action.recoveryCase);
+  if (["CREATE_PAYMENT_LINK", "RETRY_PAYMENT"].includes(action.type)) {
     const [payment, customer] = await Promise.all([
-      models.Payment.findById(recoveryCase?.payment),
-      models.Customer.findById(recoveryCase?.customer),
+      models.Payment.findById(recoveryCase.payment),
+      models.Customer.findById(recoveryCase.customer),
     ]);
-    if (!recoveryCase || !payment || !customer) throw createError("Recovery action is missing case context.", 409);
+    if (!payment || !customer) throw createError("Recovery action is missing case context.", 409);
 
     try {
       const paymentLink = await createLink({ recoveryCase, payment, customer, recoveryAction: action });
-      await audit("ACTION_EXECUTED", "Recovery Payment Link was created.", { paymentLinkId: paymentLink.id, referenceId: paymentLink.reference_id });
+      const message = action.type === "RETRY_PAYMENT"
+        ? "A new Razorpay payment attempt was created for this recovery case."
+        : "Recovery Payment Link was created.";
+      await audit("ACTION_EXECUTED", message, { paymentLinkId: paymentLink.id, referenceId: paymentLink.reference_id });
       return { action, paymentLink };
 
     } catch (error) {
@@ -81,10 +112,34 @@ export async function executeRecoveryAction(actionId, dependencies = {}) {
     }
   }
 
+  if (action.type === "SEND_REMINDER") {
+    const customer = await models.Customer.findById(recoveryCase.customer);
+    const notification = await models.RecoveryNotification.create({
+      recoveryCase: recoveryCase._id,
+      action: action._id,
+      channel: customerChannel(customer),
+    });
+    await markExecuted({ reminder: { status: notification.status, channel: notification.channel } });
+    await audit("ACTION_EXECUTED", "Recovery reminder was prepared for development delivery.");
+    return { action };
+  }
+
+  if (action.type === "OFFER_ALTERNATIVE_PAYMENT") {
+    await markExecuted({ alternativePayment: { status: "offered", options: ["UPI", "card", "netbanking"] } });
+    await audit("ACTION_EXECUTED", "Alternative payment options were prepared for the customer.");
+    return { action };
+  }
+
   action.execution ??= {};
   action.execution.metadata = { ...action.execution.metadata, unsupported: true };
   action.status = "pending";
   await action.save();
   await audit("ACTION_FAILED", `${action.type} has no execution provider configured.`);
   return { action, unsupported: true };
+}
+
+function customerChannel(customer) {
+  if (customer?.email) return "email";
+  if (customer?.phone) return "sms";
+  return "manual_follow_up";
 }

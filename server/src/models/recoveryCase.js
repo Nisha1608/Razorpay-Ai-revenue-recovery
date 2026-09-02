@@ -6,12 +6,19 @@ const recoveryCaseSchema = new mongoose.Schema(
   {
     payment: { type: mongoose.Schema.Types.ObjectId, ref: "Payment", required: true, unique: true },
     customer: { type: mongoose.Schema.Types.ObjectId, ref: "Customer", index: true },
+    parentRecoveryCase: { type: mongoose.Schema.Types.ObjectId, ref: "RecoveryCase", default: null, index: true },
+    rootRecoveryCase: { type: mongoose.Schema.Types.ObjectId, ref: "RecoveryCase", index: true },
+    supersededBy: { type: mongoose.Schema.Types.ObjectId, ref: "RecoveryCase" },
+    attemptNumber: { type: Number, required: true, default: 1, min: 1 },
+    journeyStatus: { type: String, enum: ["open", "recovered", "closed"], default: "open", index: true },
     status: { type: String, required: true, enum: RECOVERY_CASE_STATUS, default: "open", index: true },
     riskScore: { type: Number, min: 0, max: 100 },
     recoveryProbability: { type: Number, min: 0, max: 1 },
     priority: { type: String, enum: ["LOW", "MEDIUM", "HIGH"] },
     aiAnalysis: {
       summary: { type: String, maxlength: 2_000 },
+      diagnosis: { type: String, maxlength: 500 },
+      reason: { type: String, maxlength: 2_000 },
       confidence: { type: Number, min: 0, max: 1 },
       analyzedAt: Date,
     },
@@ -27,5 +34,6 @@ const recoveryCaseSchema = new mongoose.Schema(
 
 recoveryCaseSchema.index({ status: 1, createdAt: -1 });
 recoveryCaseSchema.index({ customer: 1, status: 1 });
+recoveryCaseSchema.index({ rootRecoveryCase: 1, attemptNumber: 1 });
 
 export const RecoveryCase = mongoose.models.RecoveryCase || mongoose.model("RecoveryCase", recoveryCaseSchema);

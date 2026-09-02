@@ -26,7 +26,7 @@ export function resolveRecoveryCaseId({ notes, referenceId } = {}) {
   const notedCaseId = firstDefined(notes?.recovery_case_id, notes?.recoveryCaseId);
   if (isRecoveryCaseId(notedCaseId)) return notedCaseId;
 
-  const match = /^RECOVERY_([a-f\d]{24})$/i.exec(referenceId || "");
+  const match = /^(?:RECOVERY|RETRY)_([a-f\d]{24})$/i.exec(referenceId || "");
   return match?.[1];
 }
 
@@ -119,6 +119,48 @@ async function findOrCreateCustomer(customerDetails, models) {
   return models.Customer.create(customerDetails);
 }
 
+async function createRecoveryCaseForFailedPayment(normalized, payment, customer, models) {
+  const parent = normalized.recoveryCaseId && models.RecoveryCase.findById
+    ? await models.RecoveryCase.findById(normalized.recoveryCaseId)
+    : null;
+  const isLinkedParent = parent
+    && String(parent.customer) === String(customer._id)
+    && !["recovered", "closed"].includes(parent.status);
+  const recoveryCase = await models.RecoveryCase.create({
+    payment: payment._id,
+    customer: customer._id,
+    parentRecoveryCase: isLinkedParent ? parent._id : null,
+    rootRecoveryCase: isLinkedParent ? parent.rootRecoveryCase || parent._id : undefined,
+    attemptNumber: isLinkedParent ? (parent.attemptNumber || 1) + 1 : 1,
+  });
+
+  if (!isLinkedParent) {
+    recoveryCase.rootRecoveryCase = recoveryCase._id;
+    await recoveryCase.save?.();
+    return recoveryCase;
+  }
+
+  parent.status = "superseded";
+  parent.supersededBy = recoveryCase._id;
+  await parent.save?.();
+  await models.AuditLog.create({
+    recoveryCase: parent._id,
+    payment: parent.payment,
+    actor: "system",
+    eventType: "CASE_SUPERSEDED",
+    message: "Recovery attempt superseded by a newer failed payment attempt.",
+    metadata: { attemptNumber: parent.attemptNumber || 1 },
+  });
+  return recoveryCase;
+}
+
+async function markRecoveryJourneyRecovered(recoveryCase, models) {
+  const rootRecoveryCase = recoveryCase.rootRecoveryCase || recoveryCase._id;
+  if (models.RecoveryCase.findByIdAndUpdate) {
+    await models.RecoveryCase.findByIdAndUpdate(rootRecoveryCase, { $set: { journeyStatus: "recovered" } });
+  }
+}
+
 async function recordFailedPayment(normalized, models, analyzeRecovery) {
   const existingPayment = await models.Payment.findOne({ razorpayPaymentId: normalized.payment.razorpayPaymentId });
   if (existingPayment) return { duplicatePayment: true, payment: existingPayment };
@@ -130,7 +172,7 @@ async function recordFailedPayment(normalized, models, analyzeRecovery) {
     $set: { lastPaymentAt: payment.failedAt },
   });
 
-  const recoveryCase = await models.RecoveryCase.create({ payment: payment._id, customer: customer._id });
+  const recoveryCase = await createRecoveryCaseForFailedPayment(normalized, payment, customer, models);
   await models.AuditLog.create({
     recoveryCase: recoveryCase._id,
     payment: payment._id,
@@ -169,11 +211,13 @@ async function recordCapturedPayment(normalized, models) {
 
   const recoveryCase = await models.RecoveryCase.findOneAndUpdate(
     { _id: normalized.recoveryCaseId, status: { $nin: ["recovered", "closed"] } },
-    { $set: { status: "recovered", recoveredAmount: payment.amount, recoveredAt: payment.capturedAt, closedAt: payment.capturedAt } },
+    { $set: { status: "recovered", journeyStatus: "recovered", recoveredAmount: payment.amount, recoveredAt: payment.capturedAt, closedAt: payment.capturedAt } },
     { new: true },
   );
 
   if (!recoveryCase) return { payment, recovered: false };
+
+  await markRecoveryJourneyRecovered(recoveryCase, models);
 
   await models.Customer.findByIdAndUpdate(recoveryCase.customer, { $inc: { totalRecoveredAmount: payment.amount } });
   await models.AuditLog.create({
@@ -196,6 +240,7 @@ async function recordPaymentLinkPaid(normalized, models) {
     {
       $set: {
         status: "recovered",
+        journeyStatus: "recovered",
         recoveredAmount: normalized.recoveredAmount,
         recoveredAt: normalized.paidAt,
         closedAt: normalized.paidAt,
@@ -205,6 +250,8 @@ async function recordPaymentLinkPaid(normalized, models) {
   );
 
   if (!recoveryCase) return { ignored: true, recovered: false };
+
+  await markRecoveryJourneyRecovered(recoveryCase, models);
 
   await models.Customer.findByIdAndUpdate(recoveryCase.customer, { $inc: { totalRecoveredAmount: normalized.recoveredAmount } });
   await models.AuditLog.create({

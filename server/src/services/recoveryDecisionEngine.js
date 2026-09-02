@@ -1,5 +1,6 @@
 const HIGH_VALUE_AMOUNT = 5_000_000; // Rs 50,000 in paise.
 const RETRYABLE_FAILURE = /timeout|network|temporary|processing|gateway unavailable|service unavailable/i;
+const GENERIC_CARD_FAILURE = /^payment failed$/i;
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
@@ -17,13 +18,17 @@ function decision(riskScore, confidence, recommendedAction, rationale) {
     confidence,
     recoveryProbability: confidence,
     priority: priorityForRisk(riskScore),
+    diagnosis: rationale,
     recommendedAction,
+    reason: rationale,
     rationale,
   };
 }
 
 export function isRetryableFailure(payment) {
-  return RETRYABLE_FAILURE.test(`${payment?.failureCode || ""} ${payment?.failureReason || ""}`);
+  const failure = `${payment?.failureCode || ""} ${payment?.failureReason || ""}`;
+  return RETRYABLE_FAILURE.test(failure)
+    || (payment?.method?.toLowerCase() === "card" && GENERIC_CARD_FAILURE.test(payment?.failureReason || ""));
 }
 
 export function analyzeRecoveryCase({ recoveryCase, payment, customer }) {

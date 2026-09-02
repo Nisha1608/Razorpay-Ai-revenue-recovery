@@ -110,3 +110,40 @@ test("an existing customer receives a missing webhook name without overwriting k
   assert.equal(createdRecoveryCase.customer, existingCustomer._id);
   assert.equal(result.recoveryCase, createdRecoveryCase);
 });
+
+test("a new failed Payment Link attempt supersedes and links the prior recovery case", async () => {
+  const parentCase = {
+    _id: "507f1f77bcf86cd799439011",
+    customer: "customer_004",
+    payment: "payment_previous",
+    rootRecoveryCase: "507f1f77bcf86cd799439011",
+    attemptNumber: 1,
+    status: "action_pending",
+    save: async () => {},
+  };
+  let childCase;
+  const auditEvents = [];
+  const linkedPayload = structuredClone(payload);
+  linkedPayload.payload.payment.entity.id = "pay_link_retry_failure";
+  linkedPayload.payload.payment.entity.email = "journey@example.com";
+  linkedPayload.payload.payment.entity.notes = { recovery_case_id: parentCase._id };
+  const models = {
+    Payment: { findOne: async () => null, create: async (data) => ({ ...data, _id: "payment_retry_002" }) },
+    Customer: { findOne: async () => ({ _id: "customer_004" }), findByIdAndUpdate: async () => {} },
+    RecoveryCase: {
+      findById: async () => parentCase,
+      create: async (data) => { childCase = { ...data, _id: "507f1f77bcf86cd799439021", save: async () => {} }; return childCase; },
+    },
+    AuditLog: { create: async (entry) => auditEvents.push(entry) },
+  };
+
+  const result = await processRazorpayEvent("payment.failed", linkedPayload, { ...models, analyzeRecovery: async () => {} });
+
+  assert.equal(childCase.attemptNumber, 2);
+  assert.equal(childCase.parentRecoveryCase, parentCase._id);
+  assert.equal(childCase.rootRecoveryCase, parentCase._id);
+  assert.equal(parentCase.status, "superseded");
+  assert.equal(parentCase.supersededBy, childCase._id);
+  assert.equal(auditEvents.some((entry) => entry.eventType === "CASE_SUPERSEDED"), true);
+  assert.equal(result.recoveryCase, childCase);
+});

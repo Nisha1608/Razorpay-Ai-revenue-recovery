@@ -56,14 +56,14 @@ export function validatePaymentLinkInput({ amount, currency, customer, reference
   }
 }
 
-export function createRecoveryReferenceId(recoveryCaseId) {
+export function createRecoveryReferenceId(recoveryCaseId, actionType = "CREATE_PAYMENT_LINK") {
   const caseId = recoveryCaseId?.toString();
 
   if (!/^[a-f\d]{24}$/i.test(caseId || "")) {
     throw new TypeError("A valid RecoveryCase ID is required to create a recovery Payment Link.");
   }
 
-  return `RECOVERY_${caseId}`;
+  return actionType === "RETRY_PAYMENT" ? `RETRY_${caseId}` : `RECOVERY_${caseId}`;
 }
 
 export async function createPaymentLink(input, client) {
@@ -90,9 +90,9 @@ export async function createPaymentLink(input, client) {
   }
 }
 
-export async function createRecoveryPaymentLink({ recoveryCase, payment, customer }, client) {
+export async function createRecoveryPaymentLink({ recoveryCase, payment, customer, actionType = "CREATE_PAYMENT_LINK" }, client) {
   const recoveryCaseId = recoveryCase?._id?.toString();
-  const referenceId = createRecoveryReferenceId(recoveryCaseId);
+  const referenceId = createRecoveryReferenceId(recoveryCaseId, actionType);
 
   if (!customer?.name || !customer?.email || !customer?.phone) {
     throw new RazorpayValidationError("Recovery Payment Link requires the case customer's name, email, and phone.");
@@ -106,7 +106,9 @@ export async function createRecoveryPaymentLink({ recoveryCase, payment, custome
       currency: payment?.currency,
       customer: paymentLinkCustomer,
       referenceId,
-      description: `RecoverAI recovery payment for case ${recoveryCaseId}`,
+      description: actionType === "RETRY_PAYMENT"
+        ? `RecoverAI retry payment for case ${recoveryCaseId}`
+        : `RecoverAI recovery payment for case ${recoveryCaseId}`,
       notify: { sms: false, email: false },
       reminderEnable: false,
       notes: { recovery_case_id: recoveryCaseId },
@@ -117,8 +119,8 @@ export async function createRecoveryPaymentLink({ recoveryCase, payment, custome
   return { id: paymentLink.id, short_url: paymentLink.short_url, reference_id: referenceId };
 }
 
-export async function findRecoveryPaymentLink(recoveryCaseId, client) {
-  const referenceId = createRecoveryReferenceId(recoveryCaseId);
+export async function findRecoveryPaymentLink(recoveryCaseId, client, actionType = "CREATE_PAYMENT_LINK") {
+  const referenceId = createRecoveryReferenceId(recoveryCaseId, actionType);
   const razorpayClient = client || createRazorpayClient();
 
   try {

@@ -5,6 +5,7 @@ export const RECOVERY_CASE_STATUS = [
   "analyzing",
   "action_pending",
   "executing",
+  "superseded",
   "recovered",
   "closed",
 ];
@@ -29,4 +30,3 @@ export const RECOVERY_ACTION_STATUS = [
 ];
 
 export const AUDIT_ACTORS = ["system", "ai", "policy", "user", "razorpay"];
-
