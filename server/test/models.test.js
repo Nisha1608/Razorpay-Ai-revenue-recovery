@@ -20,8 +20,8 @@ test("a failed payment requires a provider payment id, amount, currency, and val
   assert.ok(error.errors.status);
 });
 
-test("recovery cases and actions only accept the defined lifecycle states", () => {
-  const recoveryCase = new RecoveryCase({ payment: "507f1f77bcf86cd799439011", status: "recovered", riskScore: 82 });
+test("recovery cases and actions only accept the defined lifecycle states and analysis fields", () => {
+  const recoveryCase = new RecoveryCase({ payment: "507f1f77bcf86cd799439011", status: "recovered", riskScore: 82, recoveryProbability: 0.87, priority: "HIGH", recommendedAction: "CREATE_PAYMENT_LINK" });
   const action = new RecoveryAction({
     recoveryCase: "507f1f77bcf86cd799439011",
     type: "CREATE_PAYMENT_LINK",
@@ -31,6 +31,12 @@ test("recovery cases and actions only accept the defined lifecycle states", () =
   assert.equal(recoveryCase.validateSync(), undefined);
   assert.equal(action.validateSync(), undefined);
   assert.ok(new RecoveryAction({ recoveryCase: "507f1f77bcf86cd799439011", type: "INVALID", rationale: "x" }).validateSync().errors.type);
+  const invalidCase = new RecoveryCase({ payment: "507f1f77bcf86cd799439012", recoveryProbability: 1.1, priority: "URGENT" });
+  const validationError = invalidCase.validateSync();
+  assert.ok(validationError.errors.recoveryProbability);
+  assert.ok(validationError.errors.priority);
+  assert.ok(new RecoveryCase({ payment: "507f1f77bcf86cd799439013", recommendedAction: "not-an-action" }).validateSync().errors.recommendedAction);
+  assert.ok(new RecoveryCase({ payment: "507f1f77bcf86cd799439014", recommendedAction: "507f1f77bcf86cd799439015" }).validateSync().errors.recommendedAction);
 });
 
 test("audit logs require an accountable actor and event message", () => {

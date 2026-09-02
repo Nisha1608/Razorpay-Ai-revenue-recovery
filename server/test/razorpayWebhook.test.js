@@ -48,6 +48,26 @@ test("failed-payment events normalize into the internal payment format", () => {
   assert.equal(normalized.payment.failureReason, "Card declined by bank");
 });
 
+test("webhook normalization preserves a Payment Page customer name and ignores Razorpay's placeholder email", () => {
+  const normalized = normalizeRazorpayPayment("payment.failed", {
+    ...payload,
+    payload: {
+      payment: {
+        entity: {
+          ...payload.payload.payment.entity,
+          notes: { name: "Rahul Sharma" },
+          email: "void@razorpay.com",
+          contact: "9876543210",
+        },
+      },
+    },
+  });
+
+  assert.equal(normalized.customer.name, "Rahul Sharma");
+  assert.equal(normalized.customer.email, undefined);
+  assert.equal(normalized.customer.phone, "9876543210");
+});
+
 test("event IDs are preferred for idempotency, with a body hash as fallback", () => {
   const rawBody = Buffer.from(JSON.stringify(payload));
 

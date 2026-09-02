@@ -591,32 +591,32 @@ async function seedDatabase() {
     const arjunAction = recoveryActions[5];
 
     await RecoveryCase.findByIdAndUpdate(amanCase._id, {
-      recommendedAction: amanAction._id,
+      recommendedAction: amanAction.type,
       activeAction: amanAction._id,
     });
 
     await RecoveryCase.findByIdAndUpdate(rahulCase._id, {
-      recommendedAction: rahulAction._id,
+      recommendedAction: rahulAction.type,
       activeAction: rahulAction._id,
     });
 
     await RecoveryCase.findByIdAndUpdate(priyaCase._id, {
-      recommendedAction: priyaAction._id,
+      recommendedAction: priyaAction.type,
       activeAction: priyaAction._id,
     });
 
     await RecoveryCase.findByIdAndUpdate(vikasCase._id, {
-      recommendedAction: vikasAction._id,
+      recommendedAction: vikasAction.type,
       activeAction: vikasAction._id,
     });
 
     await RecoveryCase.findByIdAndUpdate(nehaCase._id, {
-      recommendedAction: nehaAction._id,
+      recommendedAction: nehaAction.type,
       activeAction: nehaAction._id,
     });
 
     await RecoveryCase.findByIdAndUpdate(arjunCase._id, {
-      recommendedAction: arjunAction._id,
+      recommendedAction: arjunAction.type,
       activeAction: arjunAction._id,
     });
 

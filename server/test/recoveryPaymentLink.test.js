@@ -22,8 +22,21 @@ test("recovery Payment Links deterministically associate the RecoveryCase", asyn
   assert.equal(request.currency, "INR");
   assert.equal(request.reference_id, "RECOVERY_507f1f77bcf86cd799439011");
   assert.equal(request.notes.recovery_case_id, recoveryCase._id);
+  assert.deepEqual(request.customer, { name: "Aman Sharma", contact: "9000000001", email: "aman@example.com" });
   assert.deepEqual(request.notify, { sms: false, email: false });
   assert.equal(request.reminder_enable, false);
+});
+
+test("recovery Payment Links reject missing case customer contact without creating a link", async () => {
+  let createCalls = 0;
+  const client = { paymentLink: { create: async () => { createCalls += 1; } } };
+
+  await assert.rejects(
+    createRecoveryPaymentLink({ recoveryCase, payment, customer: { name: "Aman Sharma", email: "aman@example.com" } }, client),
+    (error) => error.statusCode === 422 && /requires the case customer's name, email, and phone/.test(error.message),
+  );
+
+  assert.equal(createCalls, 0);
 });
 
 test("Payment Link creation persists its safe provider reference without replacing the idempotency key", async () => {

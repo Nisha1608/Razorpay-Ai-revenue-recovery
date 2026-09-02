@@ -15,6 +15,14 @@ export class RazorpayApiError extends Error {
   }
 }
 
+export class RazorpayValidationError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "RazorpayValidationError";
+    this.statusCode = 422;
+  }
+}
+
 function requireCredentials({ keyId, keySecret }) {
   if (!keyId || !keySecret) {
     throw new RazorpayConfigurationError("RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET must be configured on the server.");
@@ -85,9 +93,12 @@ export async function createPaymentLink(input, client) {
 export async function createRecoveryPaymentLink({ recoveryCase, payment, customer }, client) {
   const recoveryCaseId = recoveryCase?._id?.toString();
   const referenceId = createRecoveryReferenceId(recoveryCaseId);
-  const paymentLinkCustomer = customer?.name && customer?.phone && customer?.email
-    ? { name: customer.name, contact: customer.phone, email: customer.email }
-    : undefined;
+
+  if (!customer?.name || !customer?.email || !customer?.phone) {
+    throw new RazorpayValidationError("Recovery Payment Link requires the case customer's name, email, and phone.");
+  }
+
+  const paymentLinkCustomer = { name: customer.name, contact: customer.phone, email: customer.email };
 
   const paymentLink = await createPaymentLink(
     {

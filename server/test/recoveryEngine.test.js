@@ -50,8 +50,24 @@ test("analysis creates a policy-evaluated action and marks the case action_pendi
   assert.equal(result.action.type, "CREATE_PAYMENT_LINK");
   assert.equal(result.action.policyEvaluation.allowed, true);
   assert.equal(recoveryCase.status, "action_pending");
-  assert.equal(recoveryCase.recommendedAction, ids.action);
+  assert.equal(recoveryCase.recommendedAction, "CREATE_PAYMENT_LINK");
+  assert.equal(recoveryCase.activeAction, ids.action);
+  assert.notEqual(recoveryCase.recommendedAction, result.action._id);
+  assert.equal(recoveryCase.recoveryProbability, 0.86);
+  assert.equal(recoveryCase.priority, "LOW");
   assert.deepEqual(calls.audits.map((entry) => entry.eventType), ["AI_ANALYSIS", "POLICY_EVALUATED"]);
+});
+
+test("analysis rejects invalid recovery probability and priority before creating an action", async () => {
+  const { models, calls } = analysisModels();
+  await assert.rejects(
+    analyzeAndRecommendRecovery(ids.recoveryCase, {
+      models,
+      decide: () => ({ riskScore: 40, confidence: 0.8, recoveryProbability: 1.2, priority: "URGENT", recommendedAction: "CREATE_PAYMENT_LINK", rationale: "Invalid output" }),
+    }),
+    /invalid recovery probability/,
+  );
+  assert.equal(calls.actions.length, 0);
 });
 
 test("approval updates the action and activates it on the recovery case", async () => {
@@ -79,6 +95,14 @@ test("policy-blocked actions cannot be approved", async () => {
   );
 });
 
+test("unapproved actions cannot be executed", async () => {
+  const action = { _id: ids.action, status: "pending" };
+  await assert.rejects(
+    executeRecoveryAction(ids.action, { models: { RecoveryAction: { findById: async () => action } } }),
+    (error) => error.statusCode === 409 && /Only approved recovery actions/.test(error.message),
+  );
+});
+
 test("approved Payment Link action delegates to the existing recovery Payment Link service", async () => {
   const action = { _id: ids.action, recoveryCase: ids.recoveryCase, type: "CREATE_PAYMENT_LINK", status: "approved", save: async () => {} };
   const audits = [];
@@ -97,4 +121,66 @@ test("approved Payment Link action delegates to the existing recovery Payment Li
   assert.equal(linkInput.recoveryAction, action);
   assert.equal(result.paymentLink.id, "plink_test_phase4");
   assert.equal(audits[0].eventType, "ACTION_EXECUTED");
+});
+
+test("approval and execution operate on the same persisted RecoveryAction", async () => {
+  const action = {
+    _id: ids.action,
+    recoveryCase: ids.recoveryCase,
+    type: "CREATE_PAYMENT_LINK",
+    status: "pending",
+    policyEvaluation: { allowed: true },
+    save: async () => {},
+  };
+  const audits = [];
+  let paymentLinksCreated = 0;
+  const models = {
+    RecoveryAction: { findById: async (actionId) => actionId === ids.action ? action : null },
+    RecoveryCase: {
+      findById: async () => ({ _id: ids.recoveryCase, payment: ids.payment, customer: ids.customer }),
+      findByIdAndUpdate: async () => {},
+    },
+    Payment: { findById: async () => payment },
+    Customer: { findById: async () => customer },
+    AuditLog: { create: async (entry) => audits.push(entry) },
+  };
+
+  await approveRecoveryAction(ids.action, "operator@example.com", { models });
+  assert.equal(action.status, "approved");
+
+  await executeRecoveryAction(ids.action, {
+    models,
+    createLink: async ({ recoveryAction }) => {
+      paymentLinksCreated += 1;
+      recoveryAction.status = "executed";
+      recoveryAction.execution = { providerReference: "plink_test_once", executedAt: new Date(), metadata: { paymentLinkShortUrl: "https://rzp.io/i/once", referenceId: "RECOVERY_507f1f77bcf86cd799439011" } };
+      return { id: "plink_test_once", short_url: "https://rzp.io/i/once", reference_id: "RECOVERY_507f1f77bcf86cd799439011" };
+    },
+  });
+
+  assert.equal(action.status, "executed");
+  assert.equal(action.execution.providerReference, "plink_test_once");
+  await assert.rejects(executeRecoveryAction(ids.action, { models }), /Only approved recovery actions/);
+  assert.equal(paymentLinksCreated, 1);
+  assert.ok(audits.some((entry) => entry.eventType === "ACTION_APPROVED"));
+  assert.ok(audits.some((entry) => entry.eventType === "ACTION_EXECUTED"));
+});
+
+test("execution preserves a customer or Razorpay validation error and records an action failure", async () => {
+  const action = { _id: ids.action, recoveryCase: ids.recoveryCase, type: "CREATE_PAYMENT_LINK", status: "approved", save: async () => {} };
+  const audits = [];
+  const models = {
+    RecoveryAction: { findById: async () => action },
+    RecoveryCase: { findById: async () => ({ _id: ids.recoveryCase, payment: ids.payment, customer: ids.customer }) },
+    Payment: { findById: async () => payment },
+    Customer: { findById: async () => customer },
+    AuditLog: { create: async (entry) => audits.push(entry) },
+  };
+  const validationError = Object.assign(new Error("Recovery Payment Link requires the case customer's name, email, and phone."), { statusCode: 422 });
+
+  await assert.rejects(
+    executeRecoveryAction(ids.action, { models, createLink: async () => { throw validationError; } }),
+    (error) => error === validationError,
+  );
+  assert.equal(audits[0].eventType, "ACTION_FAILED");
 });

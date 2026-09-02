@@ -32,7 +32,19 @@ function normalizeListQuery(query) {
 }
 
 function queueAction(recoveryCase) {
-  return recoveryCase.activeAction || recoveryCase.recommendedAction || null;
+  return recoveryCase.activeAction || null;
+}
+
+export function buildRecoveryCaseDetail(recoveryCase, latestAction) {
+  return {
+    recoveryCase,
+    customer: recoveryCase.customer,
+    payment: recoveryCase.payment,
+    action: latestAction || null,
+    aiAnalysis: recoveryCase.aiAnalysis || null,
+    policyEvaluation: latestAction?.policyEvaluation || null,
+    execution: latestAction?.execution || null,
+  };
 }
 
 function queueMatches(recoveryCase, query) {
@@ -59,7 +71,7 @@ function sortQueue(cases, sortBy, sortOrder) {
 
 export function createRecoveryCaseReadRouter({ models = { AuditLog, Customer, Payment, RecoveryAction, RecoveryCase } } = {}) {
   const router = Router();
-  const populatedPaths = ["customer", "payment", "recommendedAction", "activeAction"];
+  const populatedPaths = ["customer", "payment", "activeAction"];
 
   router.get("/", async (request, response, next) => {
     try {
@@ -82,15 +94,7 @@ export function createRecoveryCaseReadRouter({ models = { AuditLog, Customer, Pa
       if (!recoveryCase) return response.status(404).json({ error: { message: "Recovery case not found." } });
 
       const latestAction = queueAction(recoveryCase) || await models.RecoveryAction.findOne({ recoveryCase: recoveryCase._id }).sort({ createdAt: -1 }).lean();
-      response.json({
-        recoveryCase,
-        customer: recoveryCase.customer,
-        payment: recoveryCase.payment,
-        action: latestAction || null,
-        aiAnalysis: recoveryCase.aiAnalysis || null,
-        policyEvaluation: latestAction?.policyEvaluation || null,
-        execution: latestAction?.execution || null,
-      });
+      response.json(buildRecoveryCaseDetail(recoveryCase, latestAction));
     } catch (error) {
       next(error);
     }
@@ -113,4 +117,3 @@ export function createRecoveryCaseReadRouter({ models = { AuditLog, Customer, Pa
 }
 
 export default createRecoveryCaseReadRouter();
-

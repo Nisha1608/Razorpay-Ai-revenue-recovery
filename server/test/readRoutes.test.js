@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { calculateDashboardMetrics } from "../src/routes/dashboardRoutes.js";
+import { buildRecoveryCaseDetail } from "../src/routes/recoveryCaseReadRoutes.js";
 
 test("dashboard metrics use only persisted case, payment, and action state", () => {
   const metrics = calculateDashboardMetrics({
@@ -23,4 +24,12 @@ test("dashboard metrics use only persisted case, payment, and action state", () 
     successfulActions: 1,
     averageRecoveryTime: 3_600_000,
   });
+});
+
+test("recovery-case detail responses retain persisted probability and priority", () => {
+  const recoveryCase = { _id: "507f1f77bcf86cd799439011", recoveryProbability: 0.87, priority: "HIGH", customer: {}, payment: {} };
+  const detail = buildRecoveryCaseDetail(recoveryCase, null);
+
+  assert.equal(detail.recoveryCase.recoveryProbability, 0.87);
+  assert.equal(detail.recoveryCase.priority, "HIGH");
 });

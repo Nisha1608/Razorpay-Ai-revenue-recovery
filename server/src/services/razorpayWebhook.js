@@ -7,6 +7,17 @@ function firstDefined(...values) {
   return values.find((value) => value !== undefined && value !== null && value !== "");
 }
 
+function usableCustomerEmail(value) {
+  const email = value?.trim().toLowerCase();
+  // Razorpay may emit this placeholder for failed Test Mode payments. It is not a customer identity.
+  return email && email !== "void@razorpay.com" ? email : undefined;
+}
+
+function usableCustomerName(...values) {
+  const name = firstDefined(...values);
+  return typeof name === "string" && name.trim() ? name.trim() : undefined;
+}
+
 function isRecoveryCaseId(value) {
   return typeof value === "string" && /^[a-f\d]{24}$/i.test(value);
 }
@@ -61,9 +72,9 @@ export function normalizeRazorpayPayment(eventType, payload) {
     },
     customer: {
       razorpayCustomerId: entity.customer_id || undefined,
-      name: entity.notes?.customer_name || undefined,
-      email: entity.email || undefined,
-      phone: entity.contact || undefined,
+      name: usableCustomerName(entity.notes?.customer_name, entity.notes?.name, entity.name),
+      email: usableCustomerEmail(entity.email) || usableCustomerEmail(entity.notes?.email),
+      phone: firstDefined(entity.contact, entity.notes?.phone),
     },
     recoveryCaseId: resolveRecoveryCaseId({ notes: entity.notes }),
   };
@@ -97,6 +108,11 @@ async function findOrCreateCustomer(customerDetails, models) {
 
   const customer = filters.length ? await models.Customer.findOne({ $or: filters }) : null;
   if (customer) {
+    // Backfill a missing name from the verified webhook payload without replacing a known identity.
+    if (!customer.name && customerDetails.name) {
+      customer.name = customerDetails.name;
+      await customer.save?.();
+    }
     return customer;
   }
 

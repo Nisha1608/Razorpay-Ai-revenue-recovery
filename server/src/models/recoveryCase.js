@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
 
-import { RECOVERY_CASE_STATUS } from "../constants/recovery.js";
+import { RECOVERY_ACTION_TYPES, RECOVERY_CASE_STATUS } from "../constants/recovery.js";
 
 const recoveryCaseSchema = new mongoose.Schema(
   {
@@ -8,12 +8,15 @@ const recoveryCaseSchema = new mongoose.Schema(
     customer: { type: mongoose.Schema.Types.ObjectId, ref: "Customer", index: true },
     status: { type: String, required: true, enum: RECOVERY_CASE_STATUS, default: "open", index: true },
     riskScore: { type: Number, min: 0, max: 100 },
+    recoveryProbability: { type: Number, min: 0, max: 1 },
+    priority: { type: String, enum: ["LOW", "MEDIUM", "HIGH"] },
     aiAnalysis: {
       summary: { type: String, maxlength: 2_000 },
       confidence: { type: Number, min: 0, max: 1 },
       analyzedAt: Date,
     },
-    recommendedAction: { type: mongoose.Schema.Types.ObjectId, ref: "RecoveryAction" },
+    // This is the AI's action-name recommendation, not an action document identifier.
+    recommendedAction: { type: String, enum: RECOVERY_ACTION_TYPES },
     activeAction: { type: mongoose.Schema.Types.ObjectId, ref: "RecoveryAction" },
     recoveredAmount: { type: Number, default: 0, min: 0 },
     recoveredAt: Date,
@@ -26,4 +29,3 @@ recoveryCaseSchema.index({ status: 1, createdAt: -1 });
 recoveryCaseSchema.index({ customer: 1, status: 1 });
 
 export const RecoveryCase = mongoose.models.RecoveryCase || mongoose.model("RecoveryCase", recoveryCaseSchema);
-

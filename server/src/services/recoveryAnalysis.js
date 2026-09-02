@@ -1,9 +1,25 @@
 import { AuditLog, Customer, Payment, RecoveryAction, RecoveryCase } from "../models/index.js";
+import { RECOVERY_ACTION_TYPES } from "../constants/recovery.js";
 import { analyzeRecoveryCase } from "./recoveryDecisionEngine.js";
 import { evaluateRecoveryPolicy } from "./recoveryPolicy.js";
 
 function createError(message, statusCode) {
   return Object.assign(new Error(message), { statusCode });
+}
+
+export function validateRecoveryDecision(decision) {
+  if (!Number.isFinite(decision?.riskScore) || decision.riskScore < 0 || decision.riskScore > 100) {
+    throw createError("Recovery analysis returned an invalid risk score.", 422);
+  }
+  if (!Number.isFinite(decision?.recoveryProbability) || decision.recoveryProbability < 0 || decision.recoveryProbability > 1) {
+    throw createError("Recovery analysis returned an invalid recovery probability.", 422);
+  }
+  if (!["LOW", "MEDIUM", "HIGH"].includes(decision?.priority)) {
+    throw createError("Recovery analysis returned an invalid priority.", 422);
+  }
+  if (!RECOVERY_ACTION_TYPES.includes(decision?.recommendedAction)) {
+    throw createError("Recovery analysis returned an invalid action.", 422);
+  }
 }
 
 export async function analyzeAndRecommendRecovery(recoveryCaseId, dependencies = {}) {
@@ -28,6 +44,7 @@ export async function analyzeAndRecommendRecovery(recoveryCaseId, dependencies =
   if (!payment || !customer) throw createError("Recovery case is missing its payment or customer.", 409);
 
   const decision = decide({ recoveryCase, payment, customer });
+  validateRecoveryDecision(decision);
   const policy = evaluate({ action: decision.recommendedAction, payment, customer, recoveryCase });
   const action = await models.RecoveryAction.create({
     recoveryCase: recoveryCase._id,
@@ -41,8 +58,11 @@ export async function analyzeAndRecommendRecovery(recoveryCaseId, dependencies =
 
   recoveryCase.status = "action_pending";
   recoveryCase.riskScore = decision.riskScore;
+  recoveryCase.recoveryProbability = decision.recoveryProbability;
+  recoveryCase.priority = decision.priority;
   recoveryCase.aiAnalysis = { summary: decision.rationale, confidence: decision.confidence, analyzedAt: new Date() };
-  recoveryCase.recommendedAction = action._id;
+  recoveryCase.recommendedAction = action.type;
+  recoveryCase.activeAction = action._id;
   await recoveryCase.save();
 
   await models.AuditLog.create([
@@ -53,7 +73,7 @@ export async function analyzeAndRecommendRecovery(recoveryCaseId, dependencies =
       actor: "ai",
       eventType: "AI_ANALYSIS",
       message: `AI recommended ${action.type}.`,
-      after: { riskScore: decision.riskScore, confidence: decision.confidence, recommendedAction: action.type },
+      after: { riskScore: decision.riskScore, recoveryProbability: decision.recoveryProbability, priority: decision.priority, confidence: decision.confidence, recommendedAction: action.type },
     },
     {
       recoveryCase: recoveryCase._id,
@@ -68,4 +88,3 @@ export async function analyzeAndRecommendRecovery(recoveryCaseId, dependencies =
 
   return { recoveryCase, action, duplicate: false };
 }
-
