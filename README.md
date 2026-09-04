@@ -1,18 +1,21 @@
 # 🚀 RecoverAI — Intelligent Revenue Recovery System
 
-> **AI-driven recovery for failed payments — retry, remind, or escalate, automatically.**
+> **AI-powered system to recover failed payments using smart retries, payment links, and escalation — safely, transparently, and at scale.**
 
-![Node.js](https://img.shields.io/badge/Node.js-Express-339933?style=flat-square&logo=node.js&logoColor=white)
-![React](https://img.shields.io/badge/React-Frontend-61DAFB?style=flat-square&logo=react&logoColor=black)
-![MongoDB](https://img.shields.io/badge/MongoDB-Database-47A248?style=flat-square&logo=mongodb&logoColor=white)
-![Razorpay](https://img.shields.io/badge/Razorpay-Payments-0C2451?style=flat-square)
-![Gemini](https://img.shields.io/badge/Gemini%2FOpenAI-AI_Layer-4285F4?style=flat-square&logo=google)
-![Tests](https://img.shields.io/badge/Backend_Tests-58%2F58_Passing-success?style=flat-square)
-![Version](https://img.shields.io/badge/version-v0.6.0-blue?style=flat-square)
+<p align="center">
+  <img src="https://img.shields.io/badge/Node.js-Express-339933?style=for-the-badge&logo=node.js&logoColor=white"/>
+  <img src="https://img.shields.io/badge/React-Frontend-61DAFB?style=for-the-badge&logo=react&logoColor=black"/>
+  <img src="https://img.shields.io/badge/MongoDB-Database-47A248?style=for-the-badge&logo=mongodb&logoColor=white"/>
+  <img src="https://img.shields.io/badge/Razorpay-Payments-0C2451?style=for-the-badge"/>
+  <img src="https://img.shields.io/badge/AI-Gemini%2FOpenAI-blue?style=for-the-badge"/>
+  <img src="https://img.shields.io/badge/Tests-58%2F58-success?style=for-the-badge"/>
+  <img src="https://img.shields.io/badge/Version-v0.6.0-blue?style=for-the-badge"/>
+</p>
 
 ---
 
 ## 📋 Table of Contents
+
 - [Problem Statement](#-problem-statement)
 - [Solution](#-solution)
 - [Architecture](#-architecture)
@@ -23,225 +26,271 @@
 - [Key Features](#-key-features)
 - [Tech Stack](#-tech-stack)
 - [Environment Variables](#-environment-variables)
+- [Getting Started](#-getting-started)
 - [Testing](#-testing--verification)
-- [Future Enhancements](#-future-enhancements-phase-7)
+- [Future Enhancements](#-future-enhancements)
 
 ---
 
 ## 🚨 Problem Statement
-Failed payments quietly drain revenue. Most systems:
-- Don't retry intelligently — they treat every failure as final
-- Ignore context (why it failed, how many attempts, customer history)
-- Give zero visibility into recovery attempts or outcomes
 
-**RecoverAI** fixes this by analyzing every failure, recommending the best recovery action, executing it safely through Razorpay, and tracking the full recovery lifecycle.
+Failed payments silently kill revenue.
+
+Most systems:
+- ❌ Treat failures as final  
+- ❌ No intelligent retry mechanism  
+- ❌ Ignore customer/payment context  
+- ❌ No visibility into recovery attempts  
+
+👉 Result: **Revenue leakage with no recovery strategy**
+
+---
 
 ## 💡 Solution
-RecoverAI combines:
-- **Deterministic rule engine** — reliable, always-available fallback
-- **LLM intelligence** (Gemini/OpenAI) — context-aware recovery decisions
-- **Policy engine** — final authority over what actually executes
-- **Real Razorpay integration** — payment links, retries, webhooks
-- **Recovery Journey tracking** — chains multiple attempts into one story
+
+**RecoverAI** is a **decision-driven recovery engine** that:
+
+- 🤖 Uses AI to recommend recovery actions  
+- 🧠 Falls back to deterministic logic when AI fails  
+- 🛡️ Uses a Policy Engine as final authority  
+- 💳 Executes real recovery via Razorpay  
+- 🔗 Tracks complete recovery lifecycle  
 
 ---
 
 ## 🏗️ Architecture
-```mermaid
-flowchart TB
 
-subgraph UI["🖥️ Frontend Layer"]
-    A1["React App"]
-    A2["Dashboard"]
-    A3["Case Detail + Timeline"]
-end
+> 📌 Add your architecture image here
 
-subgraph API["⚙️ Backend API Layer"]
-    B1["Express Server"]
-    B2["Recovery APIs"]
-end
 
-subgraph AI["🧠 Intelligence Layer"]
-    C1["LLM (Gemini / OpenAI)"]
-    C2["Deterministic Engine"]
-    C3["Decision Validator"]
-end
+![Architecture Diagram](assets/architecture.png)
 
-subgraph POLICY["🛡️ Policy Control"]
-    D1["Policy Engine (Final Authority)"]
-end
 
-subgraph ACTION["⚡ Execution Layer"]
-    E1["Recovery Actions"]
-    E2["Payment Link Generator"]
-    E3["Retry Handler"]
-    E4["Notification / Escalation"]
-end
+```
 
-subgraph EXT["🌐 External Systems"]
-    F1["Razorpay API"]
-    F2["Webhooks"]
-end
-
-subgraph DB["💾 Data Layer"]
-    G1["MongoDB"]
-    G2["Recovery Cases"]
-    G3["Payments"]
-    G4["Customers"]
-    G5["Audit Logs"]
-end
-
-A1 --> B1
-A2 --> B2
-A3 --> B2
-
-B1 --> C1
-B1 --> C2
-
-C1 --> C3
-C2 --> C3
-
-C3 --> D1
-
-D1 -->|Approved| E1
-D1 -->|Blocked| B1
-
-E1 --> E2
-E1 --> E3
-E1 --> E4
-
-E2 --> F1
-E3 --> F1
-
-F1 --> F2
-F2 --> B1
-
-B1 --> G1
-G1 --> G2
-G1 --> G3
-G1 --> G4
-G1 --> G5
+---
 
 ## 🔁 End-to-End Flow
 
-**1. Failure Detection** — Razorpay webhook fires on a failed payment → payment + customer data stored → a `RecoveryCase` is created.
+### 1️⃣ Failure Detection
+- Razorpay webhook detects failed payment  
+- Payment + customer stored  
+- `RecoveryCase` created  
 
-**2. AI Analysis (`/analyze`)**
+---
+
+### 2️⃣ AI Analysis (`/analyze`)
+
 ```
-LLM (Gemini/OpenAI) → structured JSON decision
-        ↓ (on failure)
+LLM (Gemini/OpenAI)
+        ↓
+Structured Decision
+        ↓ (if fails)
 Deterministic Engine (fallback)
 ```
-Output: `riskScore`, `recoveryProbability`, `priority`, `recommendedAction`, `diagnosis`, `reason`.
 
-- **Validation** — strict schema checks block hallucinated actions and out-of-range values.
-- **Policy Engine (final authority)** — AI suggests, policy decides, checking retry limits, case status, failure reason, and business rules.
-- **Action Creation** — if allowed, a `RecoveryAction` is created (`pending`); case → `action_pending`.
+Output:
+- `riskScore`
+- `recoveryProbability`
+- `priority`
+- `recommendedAction`
+- `diagnosis`
+- `reason`
 
-**3. Human Approval** — a person reviews and moves the action `pending → approved`.
+---
 
-**4. Execution (`/execute`)** — by action type:
+### 3️⃣ Validation + Policy
+
+- Strict schema validation  
+- Policy Engine decides:
+
+```
+AI suggests → Policy decides
+```
+
+---
+
+### 4️⃣ Human Approval
+
+```
+pending → approved
+```
+
+---
+
+### 5️⃣ Execution (`/execute`)
+
 | Action | Behavior |
-|---|---|
-| 💳 `CREATE_PAYMENT_LINK` | New Razorpay Payment Link, ref `RECOVERY_<caseId>` |
-| 🔁 `RETRY_PAYMENT` | New Payment Link, ref `RETRY_<caseId>` (never reuses the failed payment ID) |
-| 📩 `SEND_REMINDER` | Creates a notification record |
-| 💳 `OFFER_ALTERNATIVE_PAYMENT` | Stores alternative payment options |
-| 🧑‍💼 `ESCALATE_TO_HUMAN` | Creates an escalation record |
-| 🚫 `DO_NOTHING` | Closes the case intentionally |
+|------|--------|
+| 💳 CREATE_PAYMENT_LINK | Razorpay link (`RECOVERY_<caseId>`) |
+| 🔁 RETRY_PAYMENT | New retry link (`RETRY_<caseId>`) |
+| 📩 SEND_REMINDER | Notification stored |
+| 💳 OFFER_ALTERNATIVE_PAYMENT | Options saved |
+| 🧑‍💼 ESCALATE_TO_HUMAN | Escalation record |
+| 🚫 DO_NOTHING | Case closed |
 
-**5. Payment Completion** — on success, Razorpay's webhook fires again; the system matches `reference_id → recovery_case_id`, marks the case `recovered`, and logs the revenue as recovered.
+---
+
+### 6️⃣ Payment Success
+
+- Razorpay webhook triggers  
+- Match `reference_id → recovery_case_id`  
+- Case marked `recovered`  
 
 ---
 
 ## 🔗 Recovery Journey
-Chains multiple recovery attempts instead of treating each as isolated:
+
 ```
-Case A (failed) → retry → Case B (failed) → retry → Case C (success)
+Case A ❌ → Case B ❌ → Case C ✅
 ```
-Tracked via `parentRecoveryCase`, `rootRecoveryCase`, `supersededBy`, `attemptNumber`, `journeyStatus`. Older cases are marked `superseded`; the latest stays `active`; a final success marks the **entire journey** as recovered.
+
+Tracked via:
+- `parentRecoveryCase`
+- `rootRecoveryCase`
+- `attemptNumber`
+- `supersededBy`
+- `journeyStatus`
+
+✔ Old cases → superseded  
+✔ Latest → active  
+✔ Success → full journey recovered  
 
 ---
 
 ## 🧠 AI Decision Strategy
-**Hybrid intelligence**: primary LLM (Gemini/OpenAI) with a deterministic fallback.
 
 | Risk | Mitigation |
-|---|---|
-| LLM failure | Deterministic fallback engine |
-| Hallucination | Strict schema validation |
-| Unsafe action | Policy engine has final say |
-| API downtime | Graceful fallback, no crash |
+|------|-----------|
+| AI failure | Deterministic fallback |
+| Hallucination | Schema validation |
+| Unsafe actions | Policy engine |
+| API downtime | Graceful fallback |
 
 ---
 
 ## 🔐 Safety & Reliability
-- No execution without human approval
-- No duplicate execution (idempotent)
-- Never retries a failed Razorpay payment ID — always issues a new one
-- No case marked `recovered` without a real success webhook
-- `void@razorpay.com` excluded as a valid identity
-- Strict HTTP error handling (422 vs 500)
+
+- ✅ Human approval required  
+- ✅ Idempotent execution  
+- ✅ No fake recovery without webhook  
+- ✅ Never reuse failed payment ID  
+- ✅ Full audit trail  
+- ✅ Strict error handling  
 
 ---
 
-## 📊 Key Features
-✅ AI-powered recovery recommendations · ✅ Deterministic fallback · ✅ Policy-controlled execution · ✅ Real Razorpay integration · ✅ Recovery journey tracking · ✅ Audit trail per action · ✅ Idempotent execution · ✅ Responsive UI, no raw JSON leaks
+## ⚡ Key Features
+
+- 🚀 AI-powered decisions  
+- 🔁 Smart retries  
+- 🛡️ Policy-controlled execution  
+- 💳 Real Razorpay integration  
+- 🔗 Recovery journey tracking  
+- 📊 Audit logs  
+- ⚙️ Deterministic fallback  
+- 📱 Responsive UI  
 
 ---
 
 ## 🛠️ Tech Stack
+
 | Layer | Technology |
-|---|---|
+|------|-----------|
 | Frontend | React |
 | Backend | Node.js + Express |
 | Database | MongoDB |
-| Payments | Razorpay (Payments + Payment Links + Webhooks) |
-| AI | Gemini or OpenAI (pluggable provider) |
+| Payments | Razorpay |
+| AI | Gemini / OpenAI |
 
 ---
 
 ## 🔑 Environment Variables
 
 ```bash
-# AI Provider — choose one
+# AI Provider
 RECOVERY_AI_PROVIDER=gemini
 GEMINI_API_KEY=your_key
 GEMINI_MODEL=gemini-2.5-flash
 
-# or
+# OR
 RECOVERY_AI_PROVIDER=openai
 OPENAI_API_KEY=your_key
 OPENAI_MODEL=gpt-4.1-mini
 
 # Razorpay
-RAZORPAY_KEY_ID=...
-RAZORPAY_KEY_SECRET=...
-RAZORPAY_WEBHOOK_SECRET=...
+RAZORPAY_KEY_ID=your_key
+RAZORPAY_KEY_SECRET=your_secret
+RAZORPAY_WEBHOOK_SECRET=your_secret
 ```
-> Keep real keys in `.env` (never commit). Commit only `.env.example`.
+
+⚠️ Never commit `.env`  
+✔ Use `.env.example`
+
+---
+
+## ⚡ Getting Started
+
+```bash
+# Clone repo
+git clone https://github.com/your-username/recoverai.git
+
+# Install dependencies
+cd server
+npm install
+
+cd ../client
+npm install
+
+# Run backend
+cd ../server
+npm run dev
+
+# Run frontend
+cd ../client
+npm run dev
+```
 
 ---
 
 ## 🧪 Testing & Verification
-- **Backend:** 58/58 tests passing
-- **Frontend:** build passing
 
-Covers: AI decision validation, fallback behavior, policy enforcement, action lifecycle, Razorpay execution logic, webhook handling, duplicate prevention.
+- ✅ Backend: **58/58 tests passing**
+- ✅ Frontend: Build successful
 
----
-
-## 🚀 Future Enhancements (Phase 7+)
-- Automated retry scheduling
-- Customer segmentation (LTV-based recovery)
-- Multi-channel notifications (SMS/Email)
-- ML-based learning from past recoveries
-- Real dashboard analytics (conversion rate, recovery rate)
+Covers:
+- AI decisions  
+- Fallback logic  
+- Policy enforcement  
+- Execution lifecycle  
+- Webhook validation  
+- Duplicate protection  
 
 ---
 
-<div align="center">
+## 🚀 Future Enhancements
 
-**RecoverAI — a decision-driven recovery engine combining AI intelligence, deterministic reliability, and strict business policy to maximize recovered revenue safely and transparently.**
+- ⏱️ Smart retry scheduling  
+- 📊 Analytics dashboard  
+- 📩 Email/SMS notifications  
+- 🧠 ML-based learning  
+- 🎯 Customer segmentation  
 
-</div>
+---
+
+## 🏁 Final Note
+
+> RecoverAI is not just retry logic — it's a **decision engine**.
+
+It combines:
+- AI intelligence 🧠  
+- Deterministic reliability ⚙️  
+- Policy control 🛡️  
+
+to maximize recovered revenue safely.
+
+---
+
+<p align="center">
+🔥 Built for hackathons. Designed for production. Ready to scale.
+</p>
