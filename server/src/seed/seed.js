@@ -9,21 +9,22 @@ import {
   Payment,
   RecoveryAction,
   RecoveryCase,
+  RecoveryEscalation,
+  RecoveryNotification,
 } from "../models/index.js";
+import { resetRecoverAiData } from "./reset.js";
 
 async function seedDatabase() {
   try {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error("The RecoverAI seed reset is disabled in production.");
+    }
     await connectDatabase();
 
     console.log("Clearing existing demo data...");
 
-    // Development/demo only.
-    // This removes existing documents from these collections.
-    await AuditLog.deleteMany({});
-    await RecoveryAction.deleteMany({});
-    await RecoveryCase.deleteMany({});
-    await Payment.deleteMany({});
-    await Customer.deleteMany({});
+    // Development/demo only. This is limited to RecoverAI MongoDB collections.
+    await resetRecoverAiData();
 
     console.log("Existing demo data cleared.");
 
@@ -368,10 +369,16 @@ async function seedDatabase() {
         customer: aman._id,
         status: "recovered",
         riskScore: 91,
+        recoveryProbability: 0.91,
+        priority: "HIGH",
+        recommendedAction: "CREATE_PAYMENT_LINK",
+        journeyStatus: "recovered",
         aiAnalysis: {
           summary:
             "Customer has strong payment history with 14 successful payments out of 15. Failure appears temporary. Payment Link is recommended.",
           confidence: 0.91,
+          diagnosis: "A strong payment history indicates a temporary failure.",
+          reason: "Payment Link recovery is appropriate for this customer.",
           analyzedAt: new Date("2026-08-30T10:01:00Z"),
         },
         recoveredAmount: 1250000,
@@ -385,10 +392,15 @@ async function seedDatabase() {
         customer: rahul._id,
         status: "open",
         riskScore: 32,
+        recoveryProbability: 0.32,
+        priority: "LOW",
+        recommendedAction: "DO_NOTHING",
         aiAnalysis: {
           summary:
             "Customer has a high historical failure rate. Automatic recovery has low expected value.",
           confidence: 0.82,
+          diagnosis: "Repeated failures indicate low recovery value.",
+          reason: "Avoid unnecessary automated recovery attempts.",
           analyzedAt: new Date("2026-08-30T10:05:00Z"),
         },
       },
@@ -399,10 +411,15 @@ async function seedDatabase() {
         customer: priya._id,
         status: "action_pending",
         riskScore: 78,
+        recoveryProbability: 0.88,
+        priority: "HIGH",
+        recommendedAction: "CREATE_PAYMENT_LINK",
         aiAnalysis: {
           summary:
             "Customer has strong historical payment behavior. UPI/payment-link recovery is likely to succeed.",
           confidence: 0.88,
+          diagnosis: "Strong payment behavior supports a recovery link.",
+          reason: "A Payment Link provides a low-friction recovery path.",
           analyzedAt: new Date("2026-08-30T10:10:00Z"),
         },
       },
@@ -413,10 +430,15 @@ async function seedDatabase() {
         customer: vikas._id,
         status: "action_pending",
         riskScore: 94,
+        recoveryProbability: 0.95,
+        priority: "HIGH",
+        recommendedAction: "ESCALATE_TO_HUMAN",
         aiAnalysis: {
           summary:
             "High-value payment requires human review before automated recovery.",
           confidence: 0.95,
+          diagnosis: "The failed payment exceeds the automatic recovery threshold.",
+          reason: "High-value recovery requires human review.",
           analyzedAt: new Date("2026-08-30T10:12:00Z"),
         },
       },
@@ -427,10 +449,15 @@ async function seedDatabase() {
         customer: neha._id,
         status: "open",
         riskScore: 69,
+        recoveryProbability: 0.79,
+        priority: "MEDIUM",
+        recommendedAction: "SEND_REMINDER",
         aiAnalysis: {
           summary:
             "UPI timeout appears temporary. Alternative payment path may recover the transaction.",
           confidence: 0.79,
+          diagnosis: "The UPI timeout appears temporary.",
+          reason: "A reminder can offer a lower-friction follow-up.",
           analyzedAt: new Date("2026-08-30T10:20:00Z"),
         },
       },
@@ -441,10 +468,15 @@ async function seedDatabase() {
         customer: arjun._id,
         status: "open",
         riskScore: 25,
+        recoveryProbability: 0.16,
+        priority: "LOW",
+        recommendedAction: "DO_NOTHING",
         aiAnalysis: {
           summary:
             "Customer has repeated payment failures and weak historical conversion. Avoid aggressive automated recovery.",
           confidence: 0.84,
+          diagnosis: "Historical failures outweigh successful payments.",
+          reason: "Automated recovery is unlikely to be appropriate.",
           analyzedAt: new Date("2026-08-30T10:25:00Z"),
         },
       },
@@ -458,6 +490,11 @@ async function seedDatabase() {
     const vikasCase = recoveryCases[3];
     const nehaCase = recoveryCases[4];
     const arjunCase = recoveryCases[5];
+
+    await Promise.all(recoveryCases.map((recoveryCase) => RecoveryCase.findByIdAndUpdate(recoveryCase._id, {
+      rootRecoveryCase: recoveryCase._id,
+      attemptNumber: 1,
+    })));
 
     // ============================================================
     // RECOVERY ACTIONS
@@ -527,7 +564,7 @@ async function seedDatabase() {
       {
         recoveryCase: vikasCase._id,
         type: "ESCALATE_TO_HUMAN",
-        status: "approved",
+        status: "executed",
         source: "ai",
         rationale:
           "The transaction amount is above the automatic recovery threshold and requires human review.",
@@ -540,6 +577,10 @@ async function seedDatabase() {
         approval: {
           approvedBy: "policy-engine",
           approvedAt: new Date("2026-08-30T10:13:10Z"),
+        },
+        execution: {
+          executedAt: new Date("2026-08-30T10:14:00Z"),
+          metadata: { escalationStatus: "open" },
         },
       },
 
@@ -620,6 +661,12 @@ async function seedDatabase() {
       activeAction: arjunAction._id,
     });
 
+    await RecoveryEscalation.create({
+      recoveryCase: vikasCase._id,
+      action: vikasAction._id,
+      reason: vikasAction.rationale,
+    });
+
     // ============================================================
     // AUDIT LOGS
     // ============================================================
@@ -643,14 +690,16 @@ async function seedDatabase() {
         payment: amanFailedPayment._id,
         action: amanAction._id,
         actor: "ai",
-        eventType: "AI_ANALYSIS_COMPLETED",
+        eventType: "AI_ANALYSIS",
         message:
           "AI identified high recovery probability and recommended a Payment Link.",
         after: {
           riskScore: 91,
           recoveryProbability: 0.91,
+          priority: "HIGH",
           recommendedAction: "CREATE_PAYMENT_LINK",
         },
+        metadata: { analysisSource: "DETERMINISTIC" },
       },
 
       {
