@@ -118,7 +118,7 @@ function App() {
         <header className="topbar">
           <button className="mobile-menu" aria-label={mobileNavOpen ? "Close navigation" : "Open navigation"} aria-expanded={mobileNavOpen} aria-controls="primary-navigation" onClick={() => setMobileNavOpen((open) => !open)}><Menu size={21} /></button>
           <div><p className="eyebrow">RECOVERY OPERATIONS</p><h1>{page}</h1></div>
-          <div className="header-actions"><button className="icon-button" aria-label="Notifications"><Bell size={19} /><i /></button><div className="avatar">AR</div></div>
+          <div className="header-actions"><button className="icon-button" aria-label="Notifications"><Bell size={19} /><i /></button><div className="avatar">RA</div></div>
         </header>
         {page === "Overview" && <Overview health={health} metrics={metrics} onRefresh={() => { refreshHealth(); loadMetrics(); }} />}
         {page === "Recovery Queue" && <Queue queue={queue} filters={filters} onFilters={setFilters} onSelect={(id) => { setSelectedCaseId(id); setPage("Case Detail"); }} onRetry={loadQueue} />}
