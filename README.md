@@ -1,6 +1,5 @@
 <div align="center">
-
-<img src="https://readme-typing-svg.demolab.com?font=Fira+Code&weight=700&size=32&pause=1000&color=0C2451&center=true&vCenter=true&width=760&lines=RecoverAI;Intelligent+Revenue+Recovery;AI-powered+payment+recovery" alt="RecoverAI animated title" />
+<img src="https://readme-typing-svg.demolab.com?font=Fira+Code&weight=700&size=32&pause=1000&color=FF6B6B&center=true&vCenter=true&width=760&lines=RecoverAI;Intelligent+Revenue+Recovery;AI-powered+payment+recovery" alt="RecoverAI animated title" />
 
 # 🚀 RecoverAI — Intelligent Revenue Recovery System
 
@@ -17,7 +16,6 @@
   <img src="https://img.shields.io/badge/Database-MongoDB-47A248?style=for-the-badge&logo=mongodb&logoColor=white"/>
   <img src="https://img.shields.io/badge/Payments-Razorpay-0C2451?style=for-the-badge"/>
   <img src="https://img.shields.io/badge/AI-Gemini%2FOpenAI-blue?style=for-the-badge"/>
-  <img src="https://img.shields.io/badge/Tests-61%2F61-success?style=for-the-badge"/>
   <img src="https://img.shields.io/badge/Version-v0.6.0-blue?style=for-the-badge"/>
 </p>
 
@@ -29,7 +27,12 @@
 </div>
 
 ---
+---
 
+
+---
+
+## 📚 Table of Contents
 ## 📚 Table of Contents
 
 - [⚡ What is RecoverAI?](#-what-is-recoverai)
@@ -41,11 +44,12 @@
 - [🔄 Data Flow](#-data-flow--step-by-step)
 - [🔬 Core Features in Detail](#-core-features-in-detail)
 - [📦 Output Schema](#-output-schema)
+- [🚀 Product Walkthrough](#-product-walkthrough)  ✅ ADD THIS
 - [🔗 Recovery Journey](#-recovery-journey)
 - [🧠 AI Decision Strategy](#-ai-decision-strategy)
 - [🔐 Safety & Reliability](#-safety--reliability)
 - [⚡ Key Features](#-key-features)
-- [🛠️ Tech Stack](#️-tech-stack)
+- [🛠️ Technology Stack](#️-technology-stack)  ✅ ADD THIS (missing earlier)
 - [📁 Project Structure](#-project-structure)
 - [🔑 Environment Variables](#-environment-variables)
 - [⚡ Getting Started](#-getting-started)
@@ -90,6 +94,11 @@ RecoverAI introduces a **smart recovery engine**:
 - 🔗 Recovery Journey tracks full lifecycle  
 
 ---
+## 🚀 Live Demo
+
+https://willowy-lollipop-3d56dd.netlify.app" 
+ 
+
 
 ## ✨ What Makes It Different
 
@@ -103,7 +112,7 @@ RecoverAI introduces a **smart recovery engine**:
 
 ## 🏗️ Architecture
 
-> 📌 Add your architecture image below
+>
 
 <p align="center">
   <img src="assets/architecture.png" width="90%"/>
@@ -157,7 +166,7 @@ Checks:
 ### 4️⃣ Human Approval
 
 
-pending → approved
+pending → approved →execute
 
 
 ---
@@ -244,6 +253,31 @@ Every recommendation is validated before it can become a recovery action:
 ```
 
 Allowed actions: `RETRY_PAYMENT`, `CREATE_PAYMENT_LINK`, `SEND_REMINDER`, `OFFER_ALTERNATIVE_PAYMENT`, `ESCALATE_TO_HUMAN`, and `DO_NOTHING`.
+
+---
+## 🚀 Product Walkthrough
+
+<div align="center">
+
+<h3>🏠 Home Page</h3>
+<img src="./assets/HomePage.png" width="800"/>
+
+<br/>
+
+<h3>📊 Recovery Queue</h3>
+<img src="./assets/RecoveryQueue.png" width="800"/>
+
+<br/>
+
+<h3>⏱️ Recovery Timeline</h3>
+<img src="./assets/Recovery_Timeline.png" width="800"/>
+
+<br/>
+
+<h3>🔍 Audit Trail</h3>
+<img src=".assets/AuditTrail.png" width="800"/>
+
+</div>
 
 ---
 
@@ -337,22 +371,40 @@ Tracked using:
 ## 📁 Project Structure
 
 ```text
-Razorpay-Ai-revenue-recovery/
-├── client/                    # React + Vite dashboard
-│   └── src/
-│       ├── components/        # UI components
-│       ├── services/api.js    # Frontend API client
-│       └── App.jsx            # Dashboard views and workflow UI
-├── server/                    # Node.js + Express API
-│   └── src/
-│       ├── agent/             # AI recommendation prompt and schemas
-│       ├── models/            # MongoDB models
-│       ├── routes/            # API and webhook routes
-│       ├── services/          # Recovery, policy, Razorpay, and AI logic
-│       └── seed/              # Demo data seed/reset scripts
-├── assets/architecture.png    # Architecture diagram
-├── render.yaml                # Render backend configuration
-└── netlify.toml               # Netlify frontend configuration
+Razorpay-AI-revenue-recovery/
+│
+├── client/ # React + Vite frontend (Dashboard UI)
+│ ├── dist/ # Production build output
+│ │ ├── assets/
+│ │ └── index.html
+│ ├── src/
+│ │ ├── components/ # Reusable UI components
+│ │ ├── services/
+│ │ │ └── api.js # API integration layer
+│ │ └── App.jsx # Main dashboard + workflow UI
+│ ├── index.html
+│ ├── package.json
+│ └── vite.config.js
+│
+├── server/ # Node.js + Express backend
+│ ├── src/
+│ │ ├── agent/ # AI prompts & decision logic
+│ │ ├── models/ # MongoDB schemas
+│ │ ├── routes/ # API & webhook routes
+│ │ ├── services/ # Business logic (recovery, Razorpay, AI)
+│ │ └── seed/ # Seed scripts for demo/testing
+│ ├── test/ # Backend tests
+│ ├── .env # Server environment variables
+│ └── package.json
+│
+├── assets/
+│ └── architecture.png # System architecture diagram
+│
+├── .env.example # Sample environment variables
+├── .gitignore
+├── package.json # Root config (if any)
+├── render.yaml # Render backend deployment config
+└── netlify.toml # Netlify frontend deployment config
 ```
 
 ---
@@ -407,10 +459,6 @@ npm run dev
 ---
 
 ## 🧪 Testing & Verification
-
-✅ Backend: 61 / 61 tests passing  
-✅ Frontend: Build successful
-
 Covers:
 
 - AI decisions
@@ -450,7 +498,7 @@ to recover lost revenue safely and intelligently.
 
 <div align="center">
 
-### Built by Nisha Rathour
+### Developed by Nisha Rathour
 
 **ABES Engineering College, Ghaziabad**
 
