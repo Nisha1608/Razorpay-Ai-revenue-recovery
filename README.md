@@ -32,8 +32,7 @@
 
 ---
 
-## 📚 Table of Contents
-## 📚 Table of Contents
+## 📚 Table of Content
 
 - [⚡ What is RecoverAI?](#-what-is-recoverai)
 - [🚨 Problem Statement](#-problem-statement)
@@ -257,8 +256,8 @@ Allowed actions: `RETRY_PAYMENT`, `CREATE_PAYMENT_LINK`, `SEND_REMINDER`, `OFFER
 ---
 ## 🚀 Product Walkthrough
 
-<div align="center">
-
+<p align="center">
+![Home page](assets/HomePage.png)
 <h3>🏠 Home Page</h3>
 <img src="./assets/HomePage.png" width="800"/>
 
@@ -277,7 +276,7 @@ Allowed actions: `RETRY_PAYMENT`, `CREATE_PAYMENT_LINK`, `SEND_REMINDER`, `OFFER
 <h3>🔍 Audit Trail</h3>
 <img src=".assets/AuditTrail.png" width="800"/>
 
-</div>
+</p>
 
 ---
 
