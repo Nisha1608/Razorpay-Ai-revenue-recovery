@@ -8,6 +8,23 @@ function toSafeLinkInfo(action) {
   };
 }
 
+function isProviderThrottlingError(error) {
+  return error?.statusCode === 429 || error?.providerError?.httpStatus === 429;
+}
+
+function createRetryableThrottlingError(error) {
+  return Object.assign(
+    new Error("Razorpay is temporarily throttling requests. Please retry after the provider retry interval."),
+    {
+      name: "RazorpayThrottlingError",
+      statusCode: 503,
+      retryable: true,
+      providerError: error.providerError,
+      cause: error,
+    },
+  );
+}
+
 export async function createAndPersistRecoveryPaymentLink({ recoveryCase, payment, customer, recoveryAction, client }) {
   if (!["CREATE_PAYMENT_LINK", "RETRY_PAYMENT"].includes(recoveryAction?.type)) {
     throw new TypeError("RecoveryAction must create a Razorpay Payment Link.");
@@ -50,10 +67,18 @@ export async function createAndPersistRecoveryPaymentLink({ recoveryCase, paymen
       // Preserve the original create failure for the caller and audit trail.
     }
 
+    const failure = isProviderThrottlingError(error) ? createRetryableThrottlingError(error) : error;
     recoveryAction.status = "failed";
-    recoveryAction.execution.failureReason = error.message;
+    recoveryAction.execution.failureReason = failure.message;
+    if (failure.providerError || failure.retryable) {
+      recoveryAction.execution.metadata = {
+        ...recoveryAction.execution.metadata,
+        ...(failure.providerError ? { providerError: failure.providerError } : {}),
+        ...(failure.retryable ? { retryable: true } : {}),
+      };
+    }
     recoveryAction.markModified?.("execution");
     await recoveryAction.save();
-    throw error;
+    throw failure;
   }
 }

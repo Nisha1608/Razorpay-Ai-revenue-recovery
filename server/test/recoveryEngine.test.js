@@ -411,11 +411,41 @@ test("execution preserves a customer or Razorpay validation error and records an
     Customer: { findById: async () => customer },
     AuditLog: { create: async (entry) => audits.push(entry) },
   };
-  const validationError = Object.assign(new Error("Recovery Payment Link requires the case customer's name, email, and phone."), { statusCode: 422 });
+  const validationError = Object.assign(new Error("Recovery Payment Link requires the case customer's name, email, and phone."), {
+    statusCode: 422,
+    providerError: { httpStatus: 422, code: "BAD_REQUEST_ERROR", field: "customer.contact" },
+  });
 
   await assert.rejects(
     executeRecoveryAction(ids.action, { models, createLink: async () => { throw validationError; } }),
     (error) => error === validationError,
   );
   assert.equal(audits[0].eventType, "ACTION_FAILED");
+  assert.deepEqual(audits[0].metadata, { providerError: validationError.providerError });
+});
+
+test("a retryable Razorpay throttling failure is recorded in the action audit", async () => {
+  const action = { _id: ids.action, recoveryCase: ids.recoveryCase, type: "RETRY_PAYMENT", status: "approved", save: async () => {} };
+  const audits = [];
+  const throttlingError = Object.assign(new Error("Razorpay is temporarily throttling requests. Please retry after the provider retry interval."), {
+    statusCode: 503,
+    retryable: true,
+    providerError: { httpStatus: 429, code: "RATE_LIMIT_ERROR" },
+  });
+
+  await assert.rejects(
+    executeRecoveryAction(ids.action, {
+      models: {
+        RecoveryAction: { findById: async () => action },
+        RecoveryCase: { findById: async () => ({ _id: ids.recoveryCase, payment: ids.payment, customer: ids.customer }) },
+        Payment: { findById: async () => payment },
+        Customer: { findById: async () => customer },
+        AuditLog: { create: async (entry) => audits.push(entry) },
+      },
+      createLink: async () => { throw throttlingError; },
+    }),
+    (error) => error === throttlingError,
+  );
+
+  assert.deepEqual(audits[0].metadata, { providerError: throttlingError.providerError, retryable: true });
 });

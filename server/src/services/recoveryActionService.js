@@ -107,7 +107,11 @@ export async function executeRecoveryAction(actionId, dependencies = {}) {
       return { action, paymentLink };
 
     } catch (error) {
-      await audit("ACTION_FAILED", "Recovery Payment Link creation failed.");
+      const failureMetadata = {
+        ...(error.providerError ? { providerError: error.providerError } : {}),
+        ...(error.retryable ? { retryable: true } : {}),
+      };
+      await audit("ACTION_FAILED", "Recovery Payment Link creation failed.", Object.keys(failureMetadata).length ? failureMetadata : undefined);
       throw error;
     }
   }

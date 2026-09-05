@@ -1,5 +1,28 @@
 import Razorpay from "razorpay";
 
+const SAFE_PROVIDER_ERROR_FIELDS = ["code", "description", "field", "reason", "source", "step"];
+
+function safeProviderErrorText(value) {
+  return typeof value === "string" && value.trim()
+    ? value.trim().slice(0, 500)
+    : undefined;
+}
+
+export function sanitizeRazorpayProviderError(error) {
+  const providerError = error?.error || error?.response?.data?.error || error?.response?.body?.error || {};
+  const httpStatus = Number.isInteger(error?.statusCode) && error.statusCode >= 400 && error.statusCode <= 599
+    ? error.statusCode
+    : undefined;
+  const sanitized = Object.fromEntries(
+    SAFE_PROVIDER_ERROR_FIELDS
+      .map((field) => [field, safeProviderErrorText(providerError[field])])
+      .filter(([, value]) => value !== undefined),
+  );
+
+  if (httpStatus !== undefined) sanitized.httpStatus = httpStatus;
+  return Object.keys(sanitized).length ? sanitized : undefined;
+}
+
 export class RazorpayConfigurationError extends Error {
   constructor(message) {
     super(message);
@@ -12,6 +35,7 @@ export class RazorpayApiError extends Error {
     super(message, { cause });
     this.name = "RazorpayApiError";
     this.statusCode = cause?.statusCode;
+    this.providerError = sanitizeRazorpayProviderError(cause);
   }
 }
 

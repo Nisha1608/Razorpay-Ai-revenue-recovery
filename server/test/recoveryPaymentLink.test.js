@@ -78,3 +78,100 @@ test("an existing Recovery Payment Link is reconciled instead of creating a dupl
   assert.equal(recoveryAction.status, "executed");
   assert.equal(recoveryAction.execution.providerReference, "plink_existing");
 });
+
+test("a throttled RETRY_PAYMENT reconciles an existing link without creating a duplicate", async () => {
+  let lookupCalls = 0;
+  let createCalls = 0;
+  const recoveryAction = { type: "RETRY_PAYMENT", status: "approved", execution: {}, save: async () => {} };
+  const throttled = Object.assign(new Error("Too many requests"), {
+    statusCode: 429,
+    error: { code: "RATE_LIMIT_ERROR", description: "Too many requests." },
+  });
+  const client = { paymentLink: {
+    all: async () => {
+      lookupCalls += 1;
+      if (lookupCalls === 1) throw throttled;
+      return { payment_links: [{ id: "plink_retry_existing", short_url: "https://rzp.io/i/retry-existing", reference_id: "RETRY_507f1f77bcf86cd799439011" }] };
+    },
+    create: async () => { createCalls += 1; },
+  } };
+
+  const link = await createAndPersistRecoveryPaymentLink({ recoveryCase, payment, customer, recoveryAction, client });
+
+  assert.equal(lookupCalls, 2);
+  assert.equal(createCalls, 0);
+  assert.equal(link.id, "plink_retry_existing");
+  assert.equal(recoveryAction.status, "executed");
+});
+
+test("a throttled Payment Link request fails retryably without a duplicate create", async () => {
+  let lookupCalls = 0;
+  let createCalls = 0;
+  const recoveryAction = { type: "RETRY_PAYMENT", status: "approved", execution: {}, save: async () => {} };
+  const throttled = Object.assign(new Error("Too many requests"), {
+    statusCode: 429,
+    error: { code: "RATE_LIMIT_ERROR", description: "Too many requests.", reason: "too_many_requests" },
+  });
+  const client = { paymentLink: {
+    all: async () => {
+      lookupCalls += 1;
+      if (lookupCalls === 1) return { payment_links: [] };
+      return { payment_links: [] };
+    },
+    create: async () => { createCalls += 1; throw throttled; },
+  } };
+
+  await assert.rejects(
+    createAndPersistRecoveryPaymentLink({ recoveryCase, payment, customer, recoveryAction, client }),
+    (error) => error.name === "RazorpayThrottlingError" && error.statusCode === 503 && error.retryable === true,
+  );
+
+  assert.equal(lookupCalls, 2);
+  assert.equal(createCalls, 1);
+  assert.equal(recoveryAction.status, "failed");
+  assert.equal(recoveryAction.execution.metadata.retryable, true);
+  assert.deepEqual(recoveryAction.execution.metadata.providerError, {
+    httpStatus: 429,
+    code: "RATE_LIMIT_ERROR",
+    description: "Too many requests.",
+    reason: "too_many_requests",
+  });
+});
+
+test("a Razorpay provider failure is sanitized before being persisted on a failed action", async () => {
+  const recoveryAction = { type: "RETRY_PAYMENT", status: "approved", execution: {}, save: async () => {} };
+  const providerFailure = Object.assign(new Error("Request rejected"), {
+    statusCode: 400,
+    error: {
+      code: "BAD_REQUEST_ERROR",
+      description: "The customer contact is invalid.",
+      field: "customer.contact",
+      reason: "input_validation_failed",
+      source: "business",
+      step: "payment_link_create",
+    },
+    config: { headers: { authorization: "secret-must-not-be-persisted" } },
+  });
+  const client = { paymentLink: {
+    all: async () => ({ payment_links: [] }),
+    create: async () => { throw providerFailure; },
+  } };
+
+  await assert.rejects(
+    createAndPersistRecoveryPaymentLink({ recoveryCase, payment, customer, recoveryAction, client }),
+    (error) => error.providerError?.code === "BAD_REQUEST_ERROR",
+  );
+
+  assert.equal(recoveryAction.status, "failed");
+  assert.equal(recoveryAction.execution.metadata.retryable, undefined);
+  assert.deepEqual(recoveryAction.execution.metadata.providerError, {
+    httpStatus: 400,
+    code: "BAD_REQUEST_ERROR",
+    description: "The customer contact is invalid.",
+    field: "customer.contact",
+    reason: "input_validation_failed",
+    source: "business",
+    step: "payment_link_create",
+  });
+  assert.equal(JSON.stringify(recoveryAction.execution.metadata).includes("secret-must-not-be-persisted"), false);
+});
