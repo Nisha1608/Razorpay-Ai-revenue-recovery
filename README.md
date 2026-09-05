@@ -1,6 +1,5 @@
 <div align="center">
-
-<img src="https://readme-typing-svg.demolab.com?font=Fira+Code&weight=700&size=32&pause=1000&color=0C2451&center=true&vCenter=true&width=760&lines=RecoverAI;Intelligent+Revenue+Recovery;AI-powered+payment+recovery" alt="RecoverAI animated title" />
+<img src="https://readme-typing-svg.demolab.com?font=Fira+Code&weight=700&size=32&pause=1000&color=FF6B6B&center=true&vCenter=true&width=760&lines=RecoverAI;Intelligent+Revenue+Recovery;AI-powered+payment+recovery" alt="RecoverAI animated title" />
 
 # 🚀 RecoverAI — Intelligent Revenue Recovery System
 
