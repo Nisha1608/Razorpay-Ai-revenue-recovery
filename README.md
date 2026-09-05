@@ -43,12 +43,12 @@
 - [🔄 Data Flow](#-data-flow--step-by-step)
 - [🔬 Core Features in Detail](#-core-features-in-detail)
 - [📦 Output Schema](#-output-schema)
-- [🚀 Product Walkthrough](#-product-walkthrough)  ✅ ADD THIS
+- [🚀 Product Walkthrough](#-product-walkthrough)  
 - [🔗 Recovery Journey](#-recovery-journey)
 - [🧠 AI Decision Strategy](#-ai-decision-strategy)
 - [🔐 Safety & Reliability](#-safety--reliability)
 - [⚡ Key Features](#-key-features)
-- [🛠️ Technology Stack](#️-technology-stack)  ✅ ADD THIS (missing earlier)
+- [🛠️ Technology Stack](#️-technology-stack)  
 - [📁 Project Structure](#-project-structure)
 - [🔑 Environment Variables](#-environment-variables)
 - [⚡ Getting Started](#-getting-started)
@@ -95,7 +95,7 @@ RecoverAI introduces a **smart recovery engine**:
 ---
 ## 🚀 Live Demo
 
-https://willowy-lollipop-3d56dd.netlify.app" 
+https://willowy-lollipop-3d56dd.netlify.app
  
 
 
@@ -257,7 +257,7 @@ Allowed actions: `RETRY_PAYMENT`, `CREATE_PAYMENT_LINK`, `SEND_REMINDER`, `OFFER
 ## 🚀 Product Walkthrough
 
 <p align="center">
-![Home page](assets/HomePage.png)
+
 <h3>🏠 Home Page</h3>
 <img src="./assets/HomePage.png" width="800"/>
 
@@ -274,7 +274,7 @@ Allowed actions: `RETRY_PAYMENT`, `CREATE_PAYMENT_LINK`, `SEND_REMINDER`, `OFFER
 <br/>
 
 <h3>🔍 Audit Trail</h3>
-<img src=".assets/AuditTrail.png" width="800"/>
+<img src="./assets/AuditTrail.png" width="800"/>
 
 </p>
 
